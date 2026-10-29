@@ -1,0 +1,13 @@
+# Secrets and runtime state
+/config/config.php
+/storage/cache/*
+/storage/hls/*
+/storage/logs/*
+!storage/cache/.gitkeep
+!storage/hls/.gitkeep
+!storage/logs/.gitkeep
+
+# Local tooling
+tools/
+*.log
+.DS_Store

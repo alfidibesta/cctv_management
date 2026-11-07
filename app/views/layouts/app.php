@@ -21,6 +21,19 @@ $flash = flash_messages();
     <meta name="base-url" content="<?= e(url('/')) ?>">
     <meta name="color-scheme" content="dark">
     <link rel="icon" href="<?= e(url('/favicon.svg')) ?>" type="image/svg+xml">
+    <script>
+        // Apply saved appearance before first paint to avoid a theme flash.
+        (function () {
+            try {
+                var theme = localStorage.getItem('argus.theme');
+                var density = localStorage.getItem('argus.density');
+                var rail = localStorage.getItem('argus.rail');
+                if (theme === 'light') document.documentElement.dataset.theme = 'light';
+                if (density === 'compact') document.documentElement.dataset.density = 'compact';
+                if (rail === '1') document.documentElement.dataset.rail = '1';
+            } catch (e) { /* storage blocked */ }
+        })();
+    </script>
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>
 <body class="<?= e($bodyClass) ?>">
@@ -80,6 +93,10 @@ $flash = flash_messages();
             <button class="icon-btn topbar__menu" type="button" data-sidebar-toggle aria-label="Toggle navigation">
                 <?= icon('menu') ?>
             </button>
+            <button class="icon-btn topbar__rail" type="button" data-rail-toggle aria-expanded="true"
+                    aria-label="Collapse navigation" title="Collapse navigation">
+                <?= icon('panel') ?>
+            </button>
             <div class="topbar__title">
                 <h1><?= e($title ?? '') ?></h1>
                 <?php if (!empty($subtitle)): ?>
@@ -90,6 +107,15 @@ $flash = flash_messages();
                 <?php if (!empty($actions)): ?>
                     <?= $actions ?>
                 <?php endif; ?>
+                <button class="icon-btn" type="button" data-density-toggle aria-pressed="false"
+                        aria-label="Toggle compact view" title="Switch to compact view">
+                    <?= icon('rows') ?>
+                </button>
+                <button class="icon-btn" type="button" data-theme-toggle aria-pressed="false"
+                        aria-label="Toggle color theme" title="Switch to light mode">
+                    <span class="theme-icon theme-icon--dark"><?= icon('sun') ?></span>
+                    <span class="theme-icon theme-icon--light"><?= icon('moon') ?></span>
+                </button>
                 <span class="clock" data-clock>
                     <span data-clock-time><?= e(gmdate('H:i:s')) ?></span>
                     <span class="clock__date" data-clock-date><?= e(gmdate('D d M')) ?></span>

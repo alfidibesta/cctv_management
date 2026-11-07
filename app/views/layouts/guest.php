@@ -16,6 +16,15 @@ $bodyClass = $bodyClass ?? '';
     <meta name="base-url" content="<?= e(url('/')) ?>">
     <meta name="color-scheme" content="dark">
     <link rel="icon" href="<?= e(url('/favicon.svg')) ?>" type="image/svg+xml">
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('argus.theme') === 'light') {
+                    document.documentElement.dataset.theme = 'light';
+                }
+            } catch (e) { /* storage blocked */ }
+        })();
+    </script>
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
 </head>
 <body class="guest <?= e($bodyClass) ?>">

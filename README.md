@@ -26,7 +26,12 @@ browser tab: dark, quiet, and readable from a distance.
 - **PTZ pad** with configurable HTTP command templates (ACTi CGI, Axis VAPIX,
   most CGI-based cameras), speed control and press-to-move / release-to-stop.
 - **Roles and per-group access** — admin, operator, viewer.
-- **Audit trail** of sign-ins, camera changes and PTZ commands.
+- **Audit trail + error log.** Every action is recorded, and PHP errors or
+  warnings go to `storage/logs/app.log` and to the *Activity → Errors* tab.
+- **Light mode, compact density and a collapsible sidebar.** Saved per browser,
+  so a wall monitor and a laptop can keep different looks.
+- **Connection check after every save.** A new camera is probed immediately and
+  the result comes with concrete fix suggestions instead of a bare error.
 - **Snapshot download** straight from a tile.
 
 ## Requirements
@@ -35,7 +40,7 @@ browser tab: dark, quiet, and readable from a distance.
 | --- | --- |
 | PHP 8.1+ | `pdo_mysql`, `curl`, `openssl`, `mbstring` |
 | MySQL 5.7+ / MariaDB 10.4+ | utf8mb4 |
-| ffmpeg | optional, only for cameras in **HLS** mode |
+| ffmpeg | optional, only for cameras in **HLS** mode. Can be dropped into `bin/` — see below |
 | Web server | Apache with `mod_rewrite`, nginx, or PHP's built-in server |
 
 ## Install
@@ -59,6 +64,53 @@ browser tab: dark, quiet, and readable from a distance.
 The installer writes `config/config.php` (mode 0640) with the database
 credentials and a freshly generated encryption key. Back that file up: camera
 passwords cannot be decrypted without its `app.key`.
+
+### FFmpeg without a package manager (Laragon on Windows, locked-down servers)
+
+HLS mode needs an `ffmpeg` executable. You do **not** have to install a package
+or edit `PATH`: Argus looks for a binary inside the project first.
+
+1. Download a static Windows build — either
+   [gyan.dev → ffmpeg-release-essentials.zip](https://www.gyan.dev/ffmpeg/builds/)
+   or [BtbN builds](https://github.com/BtbN/FFmpeg-Builds/releases).
+2. Extract the archive and open its `bin` folder. Copy **`ffmpeg.exe`** (the
+   other files are optional, but `ffprobe.exe` is handy for debugging).
+3. Create a folder named `bin` inside the Argus project (next to `public/`,
+   `app/` and `config/`) and paste the file there:
+   ```
+   argus/
+     bin/
+       ffmpeg.exe     ← dropped in by hand
+     public/
+     app/
+   ```
+4. Open **Settings → Streaming** and leave *ffmpeg path* as `ffmpeg`. The
+   *Server diagnostics* panel now shows the detected binary path and
+   `ffmpeg (HLS) → Ready`.
+5. Reload the wall and pick **HLS** as the stream mode for an RTSP camera.
+
+How the lookup works (first match wins):
+
+| Order | Looking for |
+| --- | --- |
+| 1 | The path typed in *Settings → Streaming*, when it is not plain `ffmpeg` |
+| 2 | `bin/ffmpeg.exe` (Windows) or `bin/ffmpeg` (Linux) inside the project |
+| 3 | `ffmpeg` on the system `PATH` |
+
+Linux/macOS equivalent:
+
+```bash
+mkdir -p bin
+# static build example
+tar -xf ffmpeg-release-amd64-static.tar.xz
+cp ffmpeg-*-static/ffmpeg bin/ffmpeg
+chmod +x bin/ffmpeg
+```
+
+If you would rather point at an absolute path such as
+`C:\tools\ffmpeg\bin\ffmpeg.exe`, type it into *ffmpeg path* instead — Argus
+accepts both. Add `bin/ffmpeg*` to `.gitignore` if you commit this project, so
+the ~100 MB binary stays out of the repository.
 
 ### Apache
 
@@ -186,6 +238,16 @@ in `stream.php`.
 `cleanup.php` stops ffmpeg converters nobody is watching (default 15 idle
 minutes, configurable in Settings) and prunes snapshots older than a day.
 
+Logs live in `storage/logs/`:
+
+| File | Contents |
+| --- | --- |
+| `app.log` | JSON lines for every event and error (rotated at 2 MB, 3 kept) |
+| `php-error.log` | PHP's own error log, written by `log_errors` |
+
+The same entries are readable in the browser under **Activity → Errors**, and
+errors are also mirrored into the activity table.
+
 ## Layout
 
 ```
@@ -208,10 +270,12 @@ config/              config.php written by the installer
 | Tiles show **no signal** | Wrong snapshot path or credentials. Use *Test* on the camera. |
 | Camera test returns 401/403 | The camera rejected the credentials; create a dedicated viewing account. |
 | MJPEG tile stays black | The MJPEG path is wrong, or the camera limits concurrent connections. Try snapshot mode. |
-| HLS says ffmpeg is missing | Install ffmpeg and set its path in *Settings*. |
+| HLS says ffmpeg is missing | Copy `ffmpeg.exe` into the project `bin/` folder (see *FFmpeg without a package manager*), or set its full path in *Settings → Streaming*. |
 | HLS stays "stream unavailable" | Check `storage/hls/camera-<id>/ffmpeg.log`; usually RTSP path or credentials. |
 | Preview is blank after login | `storage/` not writable, or the session cookie is blocked. |
 | 500 after moving hosts | Delete `config/config.php` and run the installer again. |
+| Any 500 | Open **Activity → Errors** or `storage/logs/app.log`; the exact message and file:line are recorded. |
+| Camera saves but stays offline | The camera page shows the probe result with numbered fixes after saving. |
 
 ## Verified in this build
 
@@ -221,6 +285,11 @@ proxy, MJPEG proxy (multipart passthrough), ffmpeg HLS playlist + segment
 serving, PTZ error handling, viewer group isolation, CSRF rejection, layout
 persistence and 404/403 handling.
 
-Not verified here: a physical ACTi camera (no hardware on the build machine) and
-browser rendering (no browser in the build environment). The UI was reviewed as
-markup/CSS and all pages return valid HTML.
+Also verified in a real browser against this build: dark and light themes, the
+compact density, sidebar rail mode, collapsible cards (state survives reload),
+the post-save camera check with fix suggestions, the *Activity → Errors* tab and
+its level filter, and the friendly 500 page produced by the global error handler.
+
+Not verified here: a physical ACTi camera (no hardware on the build machine), and
+ffmpeg HLS playback with a real RTSP camera (no binary or camera in the build
+environment — only the drop-in lookup and the failure guidance were exercised).

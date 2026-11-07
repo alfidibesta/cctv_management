@@ -55,6 +55,122 @@
         return data;
     };
 
+    /* --------------------------------------------------------- appearance */
+    const html = document.documentElement;
+    const pref = {
+        get(key) {
+            try {
+                return window.localStorage.getItem(`argus.${key}`);
+            } catch (error) {
+                return null;
+            }
+        },
+        set(key, value) {
+            try {
+                window.localStorage.setItem(`argus.${key}`, value);
+            } catch (error) {
+                /* private mode: session-only preference */
+            }
+        },
+    };
+
+    const applyTheme = (theme) => {
+        if (theme === 'light') {
+            html.dataset.theme = 'light';
+        } else {
+            delete html.dataset.theme;
+        }
+        document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme === 'light' ? 'light' : 'dark');
+        document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
+            button.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+            button.title = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+        });
+    };
+
+    const applyDensity = (density) => {
+        if (density === 'compact') {
+            html.dataset.density = 'compact';
+        } else {
+            delete html.dataset.density;
+        }
+        document.querySelectorAll('[data-density-toggle]').forEach((button) => {
+            button.setAttribute('aria-pressed', density === 'compact' ? 'true' : 'false');
+            button.title = density === 'compact' ? 'Switch to comfortable view' : 'Switch to compact view';
+        });
+    };
+
+    const applyRail = (collapsed) => {
+        if (collapsed) {
+            html.dataset.rail = '1';
+        } else {
+            delete html.dataset.rail;
+        }
+        document.querySelectorAll('[data-rail-toggle]').forEach((button) => {
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        });
+    };
+
+    applyTheme(pref.get('theme') === 'light' ? 'light' : 'dark');
+    applyDensity(pref.get('density') === 'compact' ? 'compact' : 'comfortable');
+    applyRail(pref.get('rail') === '1');
+
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-theme-toggle]')) {
+            const next = html.dataset.theme === 'light' ? 'dark' : 'light';
+            applyTheme(next);
+            pref.set('theme', next);
+            return;
+        }
+
+        if (event.target.closest('[data-density-toggle]')) {
+            const next = html.dataset.density === 'compact' ? 'comfortable' : 'compact';
+            applyDensity(next);
+            pref.set('density', next);
+            window.dispatchEvent(new CustomEvent('argus:density'));
+            return;
+        }
+
+        if (event.target.closest('[data-rail-toggle]')) {
+            const next = html.dataset.rail === '1' ? '0' : '1';
+            applyRail(next === '1');
+            pref.set('rail', next);
+        }
+    });
+
+    /* ------------------------------------------------ collapsible cards */
+    const collapseStores = '[data-collapse]';
+
+    function setCollapsed(card, collapsed) {
+        card.classList.toggle('is-collapsed', collapsed);
+        const button = card.querySelector('[data-collapse-toggle]');
+        if (button) {
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            button.querySelector('.collapse-label')?.replaceChildren(document.createTextNode(collapsed ? 'Show' : 'Hide'));
+        }
+    }
+
+    document.querySelectorAll(collapseStores).forEach((card) => {
+        const key = `argus.collapse.${card.dataset.collapse}`;
+        let saved = null;
+        try {
+            saved = window.localStorage.getItem(key);
+        } catch (error) {
+            saved = null;
+        }
+
+        setCollapsed(card, saved === '1' || card.dataset.collapsed === 'true');
+
+        card.querySelector('[data-collapse-toggle]')?.addEventListener('click', () => {
+            const collapsed = !card.classList.contains('is-collapsed');
+            setCollapsed(card, collapsed);
+            try {
+                window.localStorage.setItem(key, collapsed ? '1' : '0');
+            } catch (error) {
+                /* ignore */
+            }
+        });
+    });
+
     /* ------------------------------------------------------------- toasts */
     function toast(message, type = 'success') {
         const container = document.querySelector('[data-toasts]');
@@ -175,12 +291,27 @@
     });
 
     /* ------------------------------------------------- connection testing */
-    function renderTestResult(target, ok, message) {
+    function renderTestResult(target, ok, message, steps = []) {
         if (!target) return;
         target.hidden = false;
         target.classList.toggle('is-ok', ok);
         target.classList.toggle('is-bad', !ok);
-        target.textContent = message;
+        target.replaceChildren();
+
+        const line = document.createElement('p');
+        line.textContent = message;
+        target.appendChild(line);
+
+        if (Array.isArray(steps) && steps.length) {
+            const list = document.createElement('ul');
+            list.className = 'test-result__steps';
+            steps.forEach((step) => {
+                const item = document.createElement('li');
+                item.textContent = String(step);
+                list.appendChild(item);
+            });
+            target.appendChild(list);
+        }
     }
 
     document.addEventListener('click', async (event) => {
@@ -190,27 +321,33 @@
         const url = button.dataset.testUrl;
         if (!url) return;
 
+        const resultBox =
+            button.closest('[data-camera-card]')?.querySelector('[data-card-result]') ||
+            document.querySelector('[data-test-result]');
         const original = button.innerHTML;
         button.disabled = true;
         button.innerHTML = '<span class="diag">Connecting…</span>';
 
         try {
             const data = await Argus.post(url, {});
-            const latency = data.latency_ms ? ` · ${data.latency_ms} ms` : '';
+            const latency = data.latency_ms ? ` (${data.latency_ms} ms)` : '';
             renderTestResult(
-                document.querySelector('[data-test-result]'),
+                resultBox,
                 true,
-                `Camera answered${latency}. Live preview is available.`
+                data.detail ? `${data.headline} — ${data.detail}` : (data.headline || `Camera answered${latency}.`),
+                data.steps || []
             );
             toast(`Camera is online${latency}`, 'success');
             updateCardStatus(button, data.status);
         } catch (error) {
+            const payload = error.payload || {};
             renderTestResult(
-                document.querySelector('[data-test-result]'),
+                resultBox,
                 false,
-                error.message || 'The camera did not respond.'
+                payload.headline || error.message || 'The camera did not respond.',
+                payload.steps || []
             );
-            toast(error.message || 'Camera unreachable', 'error');
+            toast(payload.headline || error.message || 'Camera unreachable', 'error');
             updateCardStatus(button, 'offline');
         } finally {
             button.disabled = false;
@@ -352,6 +489,14 @@
         }
     }
 
+    /* ------------------------------------------------- dismiss check panel */
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-dismiss-check]')) {
+            event.target.closest('[data-check-result]')?.remove();
+        }
+    });
+
     Argus.updateCardStatus = updateCardStatus;
     Argus.baseUrl = baseUrl;
+    Argus.pref = pref;
 })();

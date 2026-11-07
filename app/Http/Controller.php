@@ -28,16 +28,6 @@ abstract class Controller
         return in_array((string) $this->input($key, ''), ['1', 'on', 'true', 'yes'], true);
     }
 
-    protected function only(array $source, array $keys): array
-    {
-        $result = [];
-        foreach ($keys as $key) {
-            $result[$key] = $source[$key] ?? null;
-        }
-
-        return $result;
-    }
-
     protected function json(array $payload, int $status = 200): never
     {
         json_response($payload, $status);

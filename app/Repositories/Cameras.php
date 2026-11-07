@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Argus\Repositories;
 
+use Argus\Support\Activity;
 use Argus\Support\Auth;
 use Argus\Support\Db;
 
@@ -13,6 +14,9 @@ use Argus\Support\Db;
 final class Cameras
 {
     public const STREAM_MODES = ['mjpeg', 'snapshot', 'hls'];
+
+    /** Group membership cache: one query per user and request instead of per camera. */
+    private static array $groupCache = [];
 
     public const COLUMNS = 'c.id, c.group_id, c.name, c.location, c.driver, c.host, c.port, c.rtsp_port,
         c.username, c.password_enc, c.channel, c.stream_mode, c.snapshot_path, c.mjpeg_path, c.rtsp_path,
@@ -30,8 +34,11 @@ final class Cameras
         }
 
         if ($search !== '') {
-            $where[] = '(c.name LIKE :search OR c.location LIKE :search OR c.host LIKE :search)';
-            $params['search'] = '%' . $search . '%';
+            // Distinct placeholders: native prepares reject a reused named parameter.
+            $where[] = '(c.name LIKE :search_name OR c.location LIKE :search_location OR c.host LIKE :search_host)';
+            $params['search_name'] = '%' . $search . '%';
+            $params['search_location'] = '%' . $search . '%';
+            $params['search_host'] = '%' . $search . '%';
         }
 
         $sql = 'SELECT ' . self::COLUMNS . ', g.name AS group_name
@@ -56,10 +63,7 @@ final class Cameras
             return self::all();
         }
 
-        $groupIds = array_map(static fn (array $r): int => (int) $r['group_id'], Db::all(
-            'SELECT group_id FROM user_groups WHERE user_id = :id',
-            ['id' => (int) $user['id']]
-        ));
+        $groupIds = self::groupIdsFor((int) $user['id']);
 
         if (!$groupIds) {
             return [];
@@ -135,10 +139,30 @@ final class Cameras
             return false;
         }
 
-        return (bool) Db::val(
-            'SELECT 1 FROM user_groups WHERE user_id = :uid AND group_id = :gid',
-            ['uid' => (int) $user['id'], 'gid' => (int) $camera['group_id']]
-        );
+        return in_array((int) $camera['group_id'], self::groupIdsFor((int) $user['id']), true);
+    }
+
+    /** @return array<int, int> */
+    private static function groupIdsFor(int $userId): array
+    {
+        if (!isset(self::$groupCache[$userId])) {
+            $rows = Db::all('SELECT group_id FROM user_groups WHERE user_id = :id', ['id' => $userId]);
+            self::$groupCache[$userId] = array_map(static fn (array $row): int => (int) $row['group_id'], $rows);
+        }
+
+        return self::$groupCache[$userId];
+    }
+
+    /** Record an online/offline transition in the activity feed. */
+    public static function noteStatusChange(array $camera, string $status, ?string $error = null): void
+    {
+        $previous = (string) ($camera['status'] ?? 'unknown');
+        if ($previous === $status) {
+            return;
+        }
+
+        $description = $camera['name'] . ' is ' . $status . ($error !== null && $error !== '' ? ' — ' . $error : '');
+        Activity::log('camera.' . $status, $description, 'camera', isset($camera['id']) ? (int) $camera['id'] : null);
     }
 
     public static function create(array $data): int
@@ -178,11 +202,20 @@ final class Cameras
 
     public static function counts(): array
     {
+        // One round-trip instead of four COUNT queries.
+        $row = Db::one(
+            "SELECT COUNT(*) AS total,
+                    COALESCE(SUM(status = 'online'), 0) AS online,
+                    COALESCE(SUM(status = 'offline'), 0) AS offline,
+                    COALESCE(SUM(is_enabled = 1), 0) AS enabled
+             FROM cameras"
+        );
+
         return [
-            'total'   => (int) Db::val('SELECT COUNT(*) FROM cameras'),
-            'online'  => (int) Db::val("SELECT COUNT(*) FROM cameras WHERE status = 'online'"),
-            'offline' => (int) Db::val("SELECT COUNT(*) FROM cameras WHERE status = 'offline'"),
-            'enabled' => (int) Db::val('SELECT COUNT(*) FROM cameras WHERE is_enabled = 1'),
+            'total'   => (int) ($row['total'] ?? 0),
+            'online'  => (int) ($row['online'] ?? 0),
+            'offline' => (int) ($row['offline'] ?? 0),
+            'enabled' => (int) ($row['enabled'] ?? 0),
         ];
     }
 

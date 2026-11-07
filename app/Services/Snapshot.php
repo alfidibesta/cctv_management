@@ -175,11 +175,13 @@ final class Snapshot
 
         if ($result['ok']) {
             \Argus\Repositories\Cameras::recordStatus((int) $camera['id'], 'online', $result['latency_ms'] ?? null, null);
+            \Argus\Repositories\Cameras::noteStatusChange($camera, 'online');
             if (StreamUrl::isDemo($camera)) {
                 self::writeCache(self::cachePath((int) $camera['id']), $result['body']);
             }
         } else {
             \Argus\Repositories\Cameras::recordStatus((int) $camera['id'], 'offline', null, $result['error'] ?? 'Unreachable');
+            \Argus\Repositories\Cameras::noteStatusChange($camera, 'offline', $result['error'] ?? 'Unreachable');
         }
 
         return $result;
@@ -204,6 +206,7 @@ final class Snapshot
                 $frame = self::demoFrame($camera);
                 self::writeCache(self::cachePath($id), $frame);
                 \Argus\Repositories\Cameras::recordStatus($id, 'online', 1, null);
+                \Argus\Repositories\Cameras::noteStatusChange($camera, 'online');
                 $results[$id] = ['status' => 'online', 'latency_ms' => 1, 'error' => null];
                 continue;
             }
@@ -271,10 +274,12 @@ final class Snapshot
 
                     if ($online) {
                         \Argus\Repositories\Cameras::recordStatus($id, 'online', $latency, null);
+                        \Argus\Repositories\Cameras::noteStatusChange($camera, 'online');
                         $results[$id] = ['status' => 'online', 'latency_ms' => $latency, 'error' => null];
                     } else {
                         $message = self::friendlyError($error, $httpCode);
                         \Argus\Repositories\Cameras::recordStatus($id, 'offline', null, $message);
+                        \Argus\Repositories\Cameras::noteStatusChange($camera, 'offline', $message);
                         $results[$id] = ['status' => 'offline', 'latency_ms' => $latency, 'error' => $message];
                     }
 
@@ -288,6 +293,7 @@ final class Snapshot
                 $hz = $meta['handle'];
                 $id = (int) $meta['camera']['id'];
                 \Argus\Repositories\Cameras::recordStatus($id, 'offline', null, 'Probe timed out.');
+                \Argus\Repositories\Cameras::noteStatusChange($meta['camera'], 'offline', 'Probe timed out.');
                 $results[$id] = ['status' => 'offline', 'latency_ms' => null, 'error' => 'Probe timed out.'];
                 curl_multi_remove_handle($multi, $hz);
                 curl_close($hz);

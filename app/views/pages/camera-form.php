@@ -38,10 +38,15 @@ foreach ($drivers as $key => $driver) {
     <?= csrf_field() ?>
 
     <div class="form-layout__main">
-        <section class="card">
+        <section class="card" data-collapse="camera-identity">
             <header class="card__head">
-                <h3>Identity</h3>
-                <p>How this camera appears on the wall.</p>
+                <div class="card__head__text">
+                    <h3>Identity</h3>
+                    <p>How this camera appears on the wall.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body grid-2">
                 <label class="field">
@@ -83,10 +88,15 @@ foreach ($drivers as $key => $driver) {
             </div>
         </section>
 
-        <section class="card" data-connection-card>
+        <section class="card" data-connection-card data-collapse="camera-connection">
             <header class="card__head">
-                <h3>Connection</h3>
-                <p>Camera address and credentials. Credentials are encrypted at rest and never sent to the browser.</p>
+                <div class="card__head__text">
+                    <h3>Connection</h3>
+                    <p>Camera address and credentials. Credentials are encrypted at rest and never sent to the browser.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body grid-2">
                 <label class="field">
@@ -153,10 +163,15 @@ foreach ($drivers as $key => $driver) {
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" data-collapse="camera-endpoints">
             <header class="card__head">
-                <h3>Endpoints</h3>
-                <p>Leave a field empty to use the driver default. Placeholders: <code>{host} {port} {channel} {channel2} {cmd} {preset}</code></p>
+                <div class="card__head__text">
+                    <h3>Endpoints</h3>
+                    <p>Leave a field empty to use the driver default. Placeholders: <code>{host} {port} {channel} {channel2} {cmd} {preset}</code></p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body stack">
                 <label class="field">
@@ -182,10 +197,15 @@ foreach ($drivers as $key => $driver) {
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" data-collapse="camera-ptz">
             <header class="card__head">
-                <h3>Pan / tilt / zoom</h3>
-                <p>Optional HTTP command template. {cmd} is replaced with up, down, left, right, zoom_in, zoom_out, home or stop.</p>
+                <div class="card__head__text">
+                    <h3>Pan / tilt / zoom</h3>
+                    <p>Optional HTTP command template. {cmd} is replaced with up, down, left, right, zoom_in, zoom_out, home or stop.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body stack">
                 <label class="switch">

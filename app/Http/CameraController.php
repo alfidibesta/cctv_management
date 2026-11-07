@@ -6,12 +6,14 @@ namespace Argus\Http;
 
 use Argus\Repositories\Cameras;
 use Argus\Repositories\Groups;
+use Argus\Services\Diagnostics;
 use Argus\Services\Snapshot;
 use Argus\Services\StreamUrl;
 use Argus\Support\Activity;
 use Argus\Support\Auth;
 use Argus\Support\Crypto;
 use Argus\Support\Db;
+use Argus\Support\Logger;
 
 final class CameraController extends Controller
 {
@@ -21,21 +23,29 @@ final class CameraController extends Controller
         $search = (string) $this->input('q', '');
 
         $user = Auth::user();
-        $cameras = array_values(array_filter(
-            Cameras::visibleForUser($user),
-            static function (array $camera) use ($groupId, $search): bool {
-                if ($groupId > 0 && (int) $camera['group_id'] !== $groupId) {
-                    return false;
-                }
-                if ($search !== '') {
-                    $haystack = mb_strtolower(($camera['name'] ?? '') . ' ' . ($camera['location'] ?? '') . ' ' . ($camera['host'] ?? ''));
 
-                    return str_contains($haystack, mb_strtolower($search));
-                }
+        // Admins and operators see every camera, so let MySQL filter and search.
+        // Viewers keep the in-memory filter on top of their group-scoped list.
+        if (Auth::canManageCameras()) {
+            $cameras = Cameras::all($groupId > 0 ? $groupId : null, $search);
+        } else {
+            $needle = mb_strtolower($search);
+            $cameras = array_values(array_filter(
+                Cameras::visibleForUser($user),
+                static function (array $camera) use ($groupId, $needle): bool {
+                    if ($groupId > 0 && (int) $camera['group_id'] !== $groupId) {
+                        return false;
+                    }
+                    if ($needle !== '') {
+                        $haystack = mb_strtolower(($camera['name'] ?? '') . ' ' . ($camera['location'] ?? '') . ' ' . ($camera['host'] ?? ''));
 
-                return true;
-            }
-        ));
+                        return str_contains($haystack, $needle);
+                    }
+
+                    return true;
+                }
+            ));
+        }
 
         view('pages/cameras', [
             'title'     => 'Cameras',
@@ -45,7 +55,7 @@ final class CameraController extends Controller
             'filter'    => ['group' => $groupId, 'q' => $search],
             'counts'    => Cameras::counts(),
             'canManage' => Auth::canManageCameras(),
-            'errors'    => errors(),
+            'probe'     => probe_result(),
         ]);
     }
 
@@ -78,9 +88,43 @@ final class CameraController extends Controller
 
         Snapshot::clearCache($id);
         Activity::log('camera.created', 'Added camera "' . $data['name'] . '"', 'camera', $id);
-        flash('Camera added to the wall.');
+        Logger::info('camera.created', ['camera' => $id, 'host' => $data['host']]);
+
+        // Verify the camera right away and explain any problem in the UI.
+        $camera = Cameras::find($id) ?? ($data + ['id' => $id]);
+        $probe = $this->probeSafely($camera);
+        $diagnosis = Diagnostics::forCamera($camera, $probe);
+        $diagnosis['camera'] = ['id' => $id, 'name' => (string) $data['name']];
+        $diagnosis['checked_at'] = gmdate('c');
+        $_SESSION['_probe'] = $diagnosis;
+
+        Activity::log(
+            'camera.checked',
+            'Checked "' . $data['name'] . '": ' . $diagnosis['headline'],
+            'camera',
+            $id
+        );
+
+        flash(
+            $diagnosis['ok'] ? 'Camera added and the connection test passed.' : 'Camera saved, but the connection test needs attention.',
+            $diagnosis['ok'] ? 'success' : 'error'
+        );
 
         redirect('/cameras');
+    }
+
+    /** Probe without letting a camera or crypto failure break the save. */
+    private function probeSafely(array $camera): array
+    {
+        try {
+            return Snapshot::probe($camera);
+        } catch (\Throwable $e) {
+            Logger::error('Camera probe failed: ' . $e->getMessage(), [
+                'camera' => (int) ($camera['id'] ?? 0),
+            ]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
     }
 
     public function edit(string $id): void
@@ -138,15 +182,27 @@ final class CameraController extends Controller
     /** Probe a camera and return a JSON status payload. */
     public function test(string $id): void
     {
+        // Viewers may check a camera they can see; only changes need manager rights.
         $camera = CameraGate::resolve((int) $id);
-        $result = Snapshot::probe($camera);
+        $result = $this->probeSafely($camera);
+        $diagnosis = Diagnostics::forCamera($camera, $result);
+
+        Activity::log(
+            'camera.tested',
+            'Tested "' . $camera['name'] . '": ' . $diagnosis['headline'],
+            'camera',
+            (int) $camera['id']
+        );
 
         $this->json([
             'ok'         => $result['ok'],
             'status'     => $result['ok'] ? 'online' : 'offline',
             'latency_ms' => $result['latency_ms'] ?? null,
             'error'      => $result['error'] ?? null,
-        ]);
+            'headline'   => $diagnosis['headline'],
+            'detail'     => $diagnosis['detail'],
+            'steps'      => $diagnosis['steps'],
+        ], $result['ok'] ? 200 : 422);
     }
 
     /** CSV bulk import: name,host,port,username,password,driver,group */
@@ -220,6 +276,7 @@ final class CameraController extends Controller
         }
 
         Activity::log('camera.bulk', 'Bulk imported ' . $created . ' camera(s)', 'camera', null);
+        Logger::info('camera.bulk', ['created' => $created, 'skipped' => count($skipped)]);
         flash($created . ' camera(s) imported' . ($skipped ? ', ' . count($skipped) . ' line(s) skipped.' : '.'), $created > 0 ? 'success' : 'error');
 
         if ($skipped) {

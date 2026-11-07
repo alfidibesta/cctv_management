@@ -125,6 +125,17 @@ if (!function_exists('back_with_errors')) {
     }
 }
 
+if (!function_exists('probe_result')) {
+    /** Result of the connection test run right after a camera was saved. */
+    function probe_result(): ?array
+    {
+        $probe = $_SESSION['_probe'] ?? null;
+        unset($_SESSION['_probe']);
+
+        return is_array($probe) ? $probe : null;
+    }
+}
+
 if (!function_exists('errors')) {
     function errors(): array
     {

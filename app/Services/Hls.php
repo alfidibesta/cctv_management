@@ -50,18 +50,73 @@ final class Hls
 
     public static function isAvailable(): bool
     {
-        static $available = null;
+        return self::binary() !== null;
+    }
 
-        if ($available !== null) {
-            return $available;
+    /**
+     * Resolve a working ffmpeg executable once per request.
+     *
+     * Order: the path configured in Settings, then bin/ffmpeg[.exe] inside the
+     * project (drop-in binary, no PATH changes), then whatever PATH offers.
+     * This is what makes ffmpeg work on Laragon without a package manager.
+     */
+    public static function binary(): ?string
+    {
+        static $resolved = false;
+        static $path = null;
+
+        if ($resolved) {
+            return $path;
+        }
+        $resolved = true;
+
+        foreach (self::candidates() as $candidate) {
+            if (self::works($candidate)) {
+                return $path = $candidate;
+            }
         }
 
-        $ffmpeg = (string) Settings::get('ffmpeg_path', 'ffmpeg');
+        return $path = null;
+    }
+
+    /** @return array<int, string> */
+    public static function candidates(): array
+    {
+        $configured = trim((string) Settings::get('ffmpeg_path', 'ffmpeg'));
+        $list = [];
+
+        // An explicit path (or a non-default command) wins over the bundled copy.
+        if ($configured !== '' && !in_array($configured, ['ffmpeg', 'ffmpeg.exe'], true)) {
+            $list[] = $configured;
+        }
+
+        $list[] = BASE_PATH . '/bin/ffmpeg.exe';
+        $list[] = BASE_PATH . '/bin/ffmpeg';
+
+        if ($configured !== '') {
+            $list[] = $configured;
+        }
+
+        return array_values(array_unique($list));
+    }
+
+    private static function works(string $binary): bool
+    {
+        if ($binary === '') {
+            return false;
+        }
+
+        if (str_contains($binary, '/') || str_contains($binary, '\\')) {
+            if (!is_file($binary)) {
+                return false;
+            }
+        }
+
         $output = [];
         $code = 1;
-        @exec(escapeshellarg($ffmpeg) . ' -version 2>&1', $output, $code);
+        @exec(escapeshellarg($binary) . ' -version 2>&1', $output, $code);
 
-        return $available = ($code === 0 && str_contains(implode("\n", $output), 'ffmpeg version'));
+        return $code === 0 && str_contains(implode("\n", $output), 'ffmpeg version');
     }
 
     /**
@@ -73,8 +128,12 @@ final class Hls
     {
         $cameraId = (int) $camera['id'];
 
-        if (!self::isAvailable()) {
-            return ['ok' => false, 'error' => 'ffmpeg is not available on this server. Install ffmpeg or use MJPEG/snapshot mode.'];
+        $ffmpeg = self::binary();
+        if ($ffmpeg === null) {
+            return [
+                'ok'    => false,
+                'error' => 'ffmpeg was not found. Drop ffmpeg.exe into the project bin/ folder, set its path in Settings, or use MJPEG/snapshot mode.',
+            ];
         }
 
         $rtsp = StreamUrl::rtspUrl($camera);
@@ -95,7 +154,6 @@ final class Hls
         }
         @unlink($playlist);
 
-        $ffmpeg = (string) Settings::get('ffmpeg_path', 'ffmpeg');
         $transport = ($camera['transport'] ?? 'tcp') === 'udp' ? 'udp' : 'tcp';
 
         $args = [

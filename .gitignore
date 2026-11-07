@@ -10,4 +10,10 @@
 # Local tooling
 tools/
 *.log
+
+# Hand-dropped binaries (ffmpeg for HLS mode)
+/bin/ffmpeg
+/bin/ffmpeg.exe
+/bin/ffprobe
+/bin/ffprobe.exe
 .DS_Store

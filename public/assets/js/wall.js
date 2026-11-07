@@ -462,10 +462,9 @@
                         : entry.status;
                 }
 
-                if (tile) {
-                    const overlay = tile.querySelector('.tile__offline');
-                    if (overlay) overlay.hidden = entry.status !== 'offline';
-                }
+                // Offline tiles already receive a "no signal" frame with the reason
+                // from stream.php; only a genuinely broken image needs the overlay.
+
             });
 
             updateOnlineCount();

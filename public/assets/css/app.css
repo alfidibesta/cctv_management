@@ -2594,3 +2594,528 @@ body.guest {
         transition-duration: 0.001ms !important;
     }
 }
+
+/* ==========================================================================
+   Appearance: light theme, compact density, collapsible navigation/cards
+   Tiles always keep a dark media backdrop — video reads better on black.
+   ========================================================================== */
+
+:root[data-theme="light"] {
+    --bg: #f2f5f7;
+    --bg-soft: #e9edf1;
+    --panel: #ffffff;
+    --panel-2: #f5f7f9;
+    --panel-3: #e9edf1;
+    --border: rgba(16, 26, 35, 0.1);
+    --border-strong: rgba(16, 26, 35, 0.19);
+    --text: #101820;
+    --text-soft: #3a4753;
+    --muted: #64717d;
+    --accent: #0c8f72;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(12, 143, 114, 0.12);
+    --danger: #c62828;
+    --danger-soft: rgba(198, 40, 40, 0.1);
+    --warn: #a9670f;
+    --shadow-lg: 0 20px 48px rgba(16, 26, 35, 0.16);
+    color-scheme: light;
+}
+
+:root[data-theme="light"] body {
+    background: var(--bg);
+}
+
+:root[data-theme="light"] a:hover {
+    color: #0a6f5a;
+}
+
+:root[data-theme="light"] code {
+    background: rgba(16, 26, 35, 0.06);
+    color: var(--text-soft);
+}
+
+:root[data-theme="light"] .topbar {
+    background: rgba(242, 245, 247, 0.88);
+}
+
+:root[data-theme="light"] .nav__item .icon {
+    color: var(--muted);
+}
+
+:root[data-theme="light"] .nav__label,
+:root[data-theme="light"] .wall-bar__label {
+    color: #8b97a2;
+}
+
+:root[data-theme="light"] .nav__item:hover,
+:root[data-theme="light"] .user-chip:hover,
+:root[data-theme="light"] .icon-btn:hover,
+:root[data-theme="light"] .btn--ghost:hover,
+:root[data-theme="light"] .segmented__btn:hover {
+    background: rgba(16, 26, 35, 0.055);
+}
+
+:root[data-theme="light"] .btn--primary:hover {
+    background: #0f9f80;
+    border-color: #0f9f80;
+}
+
+:root[data-theme="light"] .card--muted,
+:root[data-theme="light"] .test-result {
+    background: rgba(16, 26, 35, 0.022);
+}
+
+:root[data-theme="light"] .badge {
+    background: rgba(16, 26, 35, 0.05);
+}
+
+:root[data-theme="light"] .test-result.is-ok {
+    color: #0a6f5a;
+}
+
+:root[data-theme="light"] .test-result.is-bad {
+    color: #9c1f1f;
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: #c3ccd4;
+    border-color: var(--bg);
+}
+
+:root[data-theme="light"] * {
+    scrollbar-color: #c3ccd4 transparent;
+}
+
+/* ------------------------------------------------------------- theme icon */
+.theme-icon {
+    display: inline-grid;
+    place-items: center;
+}
+
+.theme-icon--light {
+    display: none;
+}
+
+:root[data-theme="light"] .theme-icon--dark {
+    display: none;
+}
+
+:root[data-theme="light"] .theme-icon--light {
+    display: inline-grid;
+}
+
+/* ------------------------------------------------------- sidebar collapse */
+@media (min-width: 1025px) {
+    :root[data-rail="1"] {
+        --sidebar: 74px;
+    }
+
+    :root[data-rail="1"] .sidebar {
+        padding: 16px 10px;
+        align-items: center;
+        gap: 16px;
+    }
+
+    :root[data-rail="1"] .brand {
+        padding: 0;
+        justify-content: center;
+    }
+
+    :root[data-rail="1"] .brand__text,
+    :root[data-rail="1"] .nav__label,
+    :root[data-rail="1"] .nav__item span,
+    :root[data-rail="1"] .user-chip__text {
+        display: none;
+    }
+
+    :root[data-rail="1"] .nav {
+        width: 100%;
+        align-items: center;
+    }
+
+    :root[data-rail="1"] .nav__item {
+        justify-content: center;
+        width: 44px;
+        height: 40px;
+        padding: 0;
+    }
+
+    :root[data-rail="1"] .sidebar__footer {
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+    }
+
+    :root[data-rail="1"] .user-chip {
+        justify-content: center;
+        padding: 0;
+    }
+}
+
+@media (max-width: 1024px) {
+    .topbar__rail {
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------- compact view */
+:root[data-density="compact"] {
+    --topbar: 54px;
+}
+
+:root[data-density="compact"] .content {
+    padding: 14px;
+}
+
+:root[data-density="compact"] .page-head {
+    margin-bottom: 14px;
+}
+
+:root[data-density="compact"] .page-head__title {
+    font-size: 18px;
+}
+
+:root[data-density="compact"] .card__head {
+    padding: 12px 14px 0;
+}
+
+:root[data-density="compact"] .card__body {
+    padding: 13px 14px;
+}
+
+:root[data-density="compact"] .form-layout,
+:root[data-density="compact"] .form-layout__main,
+:root[data-density="compact"] .form-layout__aside {
+    gap: 12px;
+}
+
+:root[data-density="compact"] .camera-grid {
+    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+:root[data-density="compact"] .camera-card__body {
+    padding: 10px 12px;
+}
+
+:root[data-density="compact"] .wall-bar {
+    padding: 6px 10px;
+    gap: 8px;
+}
+
+:root[data-density="compact"] .wall-grid {
+    gap: 5px;
+    padding: 5px;
+}
+
+:root[data-density="compact"] .tile {
+    border-radius: 8px;
+}
+
+:root[data-density="compact"] .tile__top {
+    padding: 6px;
+}
+
+:root[data-density="compact"] .tile__meta {
+    padding: 6px 8px;
+}
+
+:root[data-density="compact"] .tile__meta h3 {
+    font-size: 12px;
+}
+
+:root[data-density="compact"] .tile__meta p,
+:root[data-density="compact"] .tile__badge {
+    display: none;
+}
+
+:root[data-density="compact"] .btn {
+    height: 34px;
+}
+
+:root[data-density="compact"] .table th,
+:root[data-density="compact"] .table td {
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+
+/* ------------------------------------------------------- collapsible cards */
+.collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    margin-left: auto;
+    padding: 0 9px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.collapse-toggle:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.card.is-collapsed .card__head {
+    padding-bottom: 14px;
+}
+
+.card.is-collapsed .card__body {
+    display: none;
+}
+
+/* ------------------------------------------------------- camera check panel */
+.check-result {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px 17px;
+    margin-bottom: 18px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-strong);
+    background: var(--panel);
+}
+
+.check-result.is-ok {
+    border-color: rgba(95, 227, 192, 0.4);
+    background: linear-gradient(180deg, var(--accent-soft), transparent 80%), var(--panel);
+}
+
+.check-result.is-bad {
+    border-color: rgba(248, 113, 113, 0.4);
+    background: linear-gradient(180deg, var(--danger-soft), transparent 80%), var(--panel);
+}
+
+.check-result__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.check-result__mark {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    flex: 0 0 auto;
+}
+
+.check-result.is-bad .check-result__mark {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.check-result__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.check-result__text h3 {
+    font-size: 14px;
+}
+
+.check-result__text p {
+    font-size: 12.8px;
+    color: var(--text-soft);
+    margin-top: 2px;
+}
+
+.check-result__detail {
+    font-size: 12.8px;
+    color: var(--muted);
+}
+
+.check-result__steps {
+    list-style: none;
+    margin: 2px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.check-result__steps li {
+    display: flex;
+    gap: 10px;
+    font-size: 12.7px;
+    line-height: 1.5;
+    color: var(--text-soft);
+}
+
+.check-result__num {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 19px;
+    height: 19px;
+    margin-top: 1px;
+    border-radius: 50%;
+    background: var(--panel-3);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10.5px;
+}
+
+.check-result__foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.check-result__foot .test-result {
+    flex-basis: 100%;
+}
+
+.test-result__steps {
+    margin: 7px 0 0;
+    padding-left: 17px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* ------------------------------------------------------- server error page */
+.error-page__detail code {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11.8px;
+}
+
+.error-page__hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 12.4px !important;
+    text-align: left;
+}
+
+.error-page__hint .icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: var(--accent);
+}
+
+.error-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 9px;
+    margin-top: 6px;
+}
+
+/* --------------------------------------------------------- activity tabs */
+.tabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 3px;
+    margin-bottom: 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+}
+
+.tabs__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 7px;
+    color: var(--text-soft);
+    font-size: 12.8px;
+    font-weight: 500;
+}
+
+.tabs__link:hover {
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text);
+}
+
+.tabs__link.is-active {
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.tabs__count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+}
+
+:root[data-theme="light"] .tabs__link:hover {
+    background: rgba(16, 26, 35, 0.055);
+}
+
+.log-line {
+    font-family: var(--mono);
+    font-size: 11.8px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.log-meta {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.tag--error {
+    color: var(--danger);
+    border-color: var(--danger-soft);
+}
+
+.tag--warning {
+    color: var(--warn);
+}
+
+.card__head__text {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    min-width: 0;
+}
+
+.diag-path .diag {
+    font-size: 10.6px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.camera-card__body .test-result {
+    margin-top: 10px;
+}
+
+.camera-card__body .test-result__steps {
+    font-size: 12px;
+}
+
+/* Camera tiles keep light chrome on their dark media in every theme. */
+.tile:not(.tile--empty) {
+    color: #eef4f7;
+}
+
+.tile:not(.tile--empty) .tile__meta h3 {
+    color: #f4f8fa;
+}
+
+.tile:not(.tile--empty) .tile__meta p {
+    color: #a9b4bd;
+}

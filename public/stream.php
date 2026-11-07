@@ -17,6 +17,7 @@ use Argus\Services\Hls;
 use Argus\Services\Snapshot;
 use Argus\Services\StreamUrl;
 use Argus\Support\Auth;
+use Argus\Support\Logger;
 use Argus\Support\Settings;
 
 Auth::requireAuth();
@@ -68,7 +69,18 @@ function serveSnapshot(array $camera, bool $download): void
     $result = Snapshot::cached($camera, $ttl);
 
     if (!$result['ok']) {
-        Cameras::recordStatus((int) $camera['id'], 'offline', null, $result['error'] ?? 'Unreachable');
+        $error = $result['error'] ?? 'Unreachable';
+
+        // Log only when the camera changes state, not on every retry of the tile.
+        if (($camera['status'] ?? '') !== 'offline') {
+            Logger::warning('Snapshot failed for "' . $camera['name'] . '": ' . $error, [
+                'camera' => (int) $camera['id'],
+                'mode'   => (string) $camera['stream_mode'],
+            ]);
+        }
+
+        Cameras::recordStatus((int) $camera['id'], 'offline', null, $error);
+        Cameras::noteStatusChange($camera, 'offline', $error);
         http_response_code(503);
         header('Content-Type: image/svg+xml');
         header('Cache-Control: no-store');
@@ -78,6 +90,7 @@ function serveSnapshot(array $camera, bool $download): void
 
     if (empty($result['cached'])) {
         Cameras::recordStatus((int) $camera['id'], 'online', $result['latency_ms'] ?? null, null);
+        Cameras::noteStatusChange($camera, 'online');
     }
 
     $contentType = $result['content_type'] ?? 'image/jpeg';

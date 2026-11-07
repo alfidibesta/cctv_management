@@ -4,9 +4,11 @@
 /** @var array $filter */
 /** @var array $counts */
 /** @var bool $canManage */
+/** @var array|null $probe */
 require_once BASE_PATH . '/app/views/partials/icons.php';
 
 $thumb = static fn (array $camera): string => url('/stream.php?camera=' . (int) $camera['id'] . '&type=snapshot');
+$probe = $probe ?? null;
 ?>
 <div class="page-head">
     <div>
@@ -23,6 +25,61 @@ $thumb = static fn (array $camera): string => url('/stream.php?camera=' . (int) 
         </div>
     <?php endif; ?>
 </div>
+
+<?php if ($probe): ?>
+    <?php
+    $probeOk = !empty($probe['ok']);
+    $probeCamera = $probe['camera'] ?? ['id' => 0, 'name' => 'Camera'];
+    $probeSteps = is_array($probe['steps'] ?? null) ? $probe['steps'] : [];
+    ?>
+    <section class="check-result <?= $probeOk ? 'is-ok' : 'is-bad' ?>" data-check-result>
+        <header class="check-result__head">
+            <span class="check-result__mark"><?= icon($probeOk ? 'check' : 'info') ?></span>
+            <div class="check-result__text">
+                <h3><?= e($probeCamera['name']) ?> — <?= $probeOk ? 'connection verified' : 'needs attention' ?></h3>
+                <p>
+                    <?= e($probe['headline'] ?? '') ?>
+                    <?php if (!empty($probe['latency_ms'])): ?>
+                        <span class="muted">· <?= (int) $probe['latency_ms'] ?> ms</span>
+                    <?php endif; ?>
+                </p>
+            </div>
+            <button type="button" class="icon-btn icon-btn--sm" data-dismiss-check aria-label="Dismiss">
+                <?= icon('close') ?>
+            </button>
+        </header>
+
+        <p class="check-result__detail"><?= e($probe['detail'] ?? '') ?></p>
+
+        <?php if ($probeSteps): ?>
+            <ol class="check-result__steps">
+                <?php foreach ($probeSteps as $index => $step): ?>
+                    <li>
+                        <span class="check-result__num"><?= $index + 1 ?></span>
+                        <span><?= e($step) ?></span>
+                    </li>
+                <?php endforeach; ?>
+            </ol>
+        <?php endif; ?>
+
+        <footer class="check-result__foot">
+            <?php if ($canManage && (int) ($probeCamera['id'] ?? 0) > 0): ?>
+                <button type="button" class="btn btn--ghost btn--sm"
+                        data-test-camera="<?= (int) $probeCamera['id'] ?>"
+                        data-test-url="<?= e(url('/cameras/' . (int) $probeCamera['id'] . '/test')) ?>">
+                    <?= icon('refresh') ?> Test again
+                </button>
+                <a class="btn btn--ghost btn--sm" href="<?= e(url('/cameras/' . (int) $probeCamera['id'] . '/edit')) ?>">
+                    <?= icon('edit') ?> Fix settings
+                </a>
+                <a class="btn btn--ghost btn--sm" href="<?= e(url('/?camera=' . (int) $probeCamera['id'])) ?>">
+                    <?= icon('eye') ?> Open on wall
+                </a>
+            <?php endif; ?>
+            <div class="test-result" data-test-result hidden></div>
+        </footer>
+    </section>
+<?php endif; ?>
 
 <form class="toolbar" method="get" action="<?= e(url('/cameras')) ?>">
     <span class="input-wrap toolbar__search">
@@ -110,6 +167,7 @@ $thumb = static fn (array $camera): string => url('/stream.php?camera=' . (int) 
                             </form>
                         <?php endif; ?>
                     </div>
+                    <div class="test-result" data-card-result hidden></div>
                 </div>
             </article>
         <?php endforeach; ?>

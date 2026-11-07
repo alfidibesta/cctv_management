@@ -21,10 +21,15 @@ $check = static function (bool $ok): string {
     <?= csrf_field() ?>
 
     <div class="form-layout__main">
-        <section class="card">
+        <section class="card" data-collapse="settings-general">
             <header class="card__head">
-                <h3>General</h3>
-                <p>Branding and timezone for timestamps.</p>
+                <div class="card__head__text">
+                    <h3>General</h3>
+                    <p>Branding and timezone for timestamps.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body grid-2">
                 <label class="field">
@@ -44,10 +49,15 @@ $check = static function (bool $ok): string {
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" data-collapse="settings-wall">
             <header class="card__head">
-                <h3>Live wall</h3>
-                <p>How often tiles refresh and how status is polled.</p>
+                <div class="card__head__text">
+                    <h3>Live wall</h3>
+                    <p>How often tiles refresh and how status is polled.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body grid-2">
                 <label class="field">
@@ -82,17 +92,26 @@ $check = static function (bool $ok): string {
             </div>
         </section>
 
-        <section class="card">
+        <section class="card" data-collapse="settings-streaming">
             <header class="card__head">
-                <h3>Streaming</h3>
-                <p>HLS conversion and TLS behaviour for camera requests.</p>
+                <div class="card__head__text">
+                    <h3>Streaming</h3>
+                    <p>HLS conversion and TLS behaviour for camera requests.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
             </header>
             <div class="card__body grid-2">
                 <label class="field">
                     <span class="field__label">ffmpeg path</span>
                     <input class="input input--mono" type="text" name="ffmpeg_path" maxlength="255"
                            value="<?= e($settings['ffmpeg_path']) ?>">
-                    <span class="field__hint">Only needed for cameras in HLS mode.</span>
+                    <span class="field__hint">
+                        Only needed for cameras in HLS mode. Leave as <code>ffmpeg</code> to use
+                        <code>bin/ffmpeg.exe</code> (Windows) or <code>bin/ffmpeg</code> inside the project,
+                        otherwise it falls back to the system PATH.
+                    </span>
                 </label>
 
                 <label class="field">
@@ -133,6 +152,9 @@ $check = static function (bool $ok): string {
                     <li><span>cURL</span><?= $check($diagnostics['curl']) ?></li>
                     <li><span>OpenSSL</span><?= $check($diagnostics['openssl']) ?></li>
                     <li><span>ffmpeg (HLS)</span><?= $check($diagnostics['ffmpeg']) ?></li>
+                    <?php if (!empty($diagnostics['ffmpeg_binary'])): ?>
+                        <li class="diag-path"><span></span><span class="diag"><?= e(str_replace(BASE_PATH, '', (string) $diagnostics['ffmpeg_binary'])) ?></span></li>
+                    <?php endif; ?>
                     <li><span>Storage writable</span><?= $check($diagnostics['storage']) ?></li>
                     <li><span>Config writable</span><?= $check($diagnostics['config_write']) ?></li>
                 </ul>

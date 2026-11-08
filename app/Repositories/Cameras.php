@@ -198,6 +198,9 @@ final class Cameras
         }
 
         Db::update('cameras', $data, 'id = :id', ['id' => $id]);
+
+        // Sampled history for the Health page (never throws, throttled internally).
+        \Argus\Services\Health::record($id, $status, $latency, $error);
     }
 
     public static function counts(): array

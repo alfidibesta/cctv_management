@@ -109,8 +109,9 @@ final class ApiController extends Controller
         Activity::log('hls.started', 'HLS started for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
 
         $this->json([
-            'ok'       => true,
-            'playlist' => url('/stream.php?camera=' . (int) $camera['id'] . '&type=hls&file=index.m3u8'),
+            'ok'              => true,
+            'playlist'        => url('/stream.php?camera=' . (int) $camera['id'] . '&type=hls&file=index.m3u8'),
+            'segment_seconds' => Hls::segmentSeconds(),
         ]);
     }
 }

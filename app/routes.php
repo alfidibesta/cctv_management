@@ -7,7 +7,9 @@ use Argus\Http\ActivityController;
 use Argus\Http\ApiController;
 use Argus\Http\AuthController;
 use Argus\Http\CameraController;
+use Argus\Http\DiscoveryController;
 use Argus\Http\GroupController;
+use Argus\Http\HealthController;
 use Argus\Http\SettingsController;
 use Argus\Http\SetupController;
 use Argus\Http\UserController;
@@ -43,6 +45,15 @@ return static function (Router $router): void {
     $router->post('/groups/{id}', [GroupController::class, 'update']);
     $router->post('/groups/{id}/delete', [GroupController::class, 'delete']);
 
+    // -- discovery & health -----------------------------------------------
+    $router->get('/discover', [DiscoveryController::class, 'index']);
+    $router->post('/discover/scan', [DiscoveryController::class, 'scan']);
+    $router->post('/discover/probe', [DiscoveryController::class, 'probe']);
+    $router->post('/discover/add', [DiscoveryController::class, 'add']);
+
+    $router->get('/health', [HealthController::class, 'index']);
+    $router->get('/health/export.csv', [HealthController::class, 'export']);
+
     // -- users, settings, audit ------------------------------------------
     $router->get('/users', [UserController::class, 'index']);
     $router->post('/users', [UserController::class, 'store']);
@@ -53,6 +64,7 @@ return static function (Router $router): void {
     $router->post('/settings', [SettingsController::class, 'update']);
 
     $router->get('/activity', [ActivityController::class, 'index']);
+    $router->get('/activity/export.csv', [ActivityController::class, 'export']);
 
     $router->get('/account', [AccountController::class, 'index']);
     $router->post('/account', [AccountController::class, 'update']);

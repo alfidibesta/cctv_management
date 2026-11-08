@@ -20,6 +20,7 @@ final class Settings
         'verify_tls'        => '0',
         'ffmpeg_path'       => 'ffmpeg',
         'hls_idle_minutes'  => '15',
+        'hls_segment_seconds' => '2',
         'status_interval'   => '20',
         'wall_title'        => 'Live wall',
     ];

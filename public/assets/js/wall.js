@@ -20,6 +20,11 @@
     const cameras = Array.isArray(config.cameras) ? config.cameras : [];
     const cameraById = new Map(cameras.map((camera) => [Number(camera.id), camera]));
 
+    // One live decoder / HTTP connection per on-screen tile, nothing off-screen.
+    const players = new Map();
+    let tileObserver = null;
+    const BLANK_FRAME = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
     const state = {
         slots: Number(config.layout.slots) || 9,
         mode: config.layout.mode === 'custom' ? 'custom' : 'auto',
@@ -88,6 +93,7 @@
 
     function render() {
         const tiles = visibleTiles();
+        stopAllStreams();
         grid.style.setProperty('--grid-cols', String(state.slots === 1 ? 1 : state.slots === 4 ? 2 : 3));
         grid.innerHTML = '';
 
@@ -104,6 +110,7 @@
 
         syncSelection();
         attachTimers();
+        observeTiles();
         updateOnlineCount();
     }
 
@@ -138,7 +145,7 @@
 
         const media =
             camera.mode === 'mjpeg'
-                ? `<img src="${esc(camera.mjpeg_url)}" alt="${esc(camera.name)}" data-mjpeg>`
+                ? `<img alt="${esc(camera.name)}" data-mjpeg data-src="${esc(camera.mjpeg_url)}">`
                 : camera.mode === 'hls'
                 ? `<video data-hls="${cameraId}" muted playsinline autoplay></video>`
                 : `<img src="${esc(camera.snapshot_url)}" alt="${esc(camera.name)}" data-snapshot="${esc(camera.snapshot_url)}">`;
@@ -181,10 +188,6 @@
                 const overlay = tile.querySelector('.tile__offline');
                 if (overlay) overlay.hidden = true;
             });
-        }
-
-        if (camera.mode === 'hls') {
-            startHls(tile, camera);
         }
 
         tile.addEventListener('click', (event) => {
@@ -485,6 +488,7 @@
     function refreshSnapshots() {
         if (document.hidden || state.paused) return;
         grid.querySelectorAll('img[data-snapshot]').forEach((img) => {
+            if (img.closest('.tile')?.dataset.inview === '0') return;
             const base = img.dataset.snapshot;
             img.src = `${base}${base.includes('?') ? '&' : '?'}t=${Date.now()}`;
         });
@@ -495,7 +499,103 @@
         snapshotTimer = window.setInterval(refreshSnapshots, state.refresh * 1000);
     }
 
+    /* ------------------------------------------------- live stream gating */
+    function destroyPlayer(cameraId) {
+        const player = players.get(cameraId);
+        if (!player) return;
+        players.delete(cameraId);
+        try {
+            player.destroy();
+        } catch (error) {
+            /* already torn down */
+        }
+    }
+
+    function stopAllStreams() {
+        players.forEach((player) => {
+            try {
+                player.destroy();
+            } catch (error) {
+                /* already torn down */
+            }
+        });
+        players.clear();
+
+        if (tileObserver) tileObserver.disconnect();
+    }
+
+    function startTileMedia(tile, camera) {
+        if (!tile || tile.dataset.live === '1') return;
+        tile.dataset.live = '1';
+
+        if (camera.mode === 'mjpeg') {
+            const img = tile.querySelector('img[data-mjpeg]');
+            if (img && img.dataset.src) img.src = img.dataset.src;
+        } else if (camera.mode === 'hls') {
+            startHls(tile, camera);
+        }
+    }
+
+    function stopTileMedia(tile, camera) {
+        if (!tile || tile.dataset.live !== '1') return;
+        tile.dataset.live = '0';
+
+        if (camera?.mode === 'mjpeg') {
+            const img = tile.querySelector('img[data-mjpeg]');
+            if (img) img.src = BLANK_FRAME;
+        } else if (camera?.mode === 'hls') {
+            destroyPlayer(camera.id);
+            const video = tile.querySelector('video[data-hls]');
+            if (video) {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+            }
+        }
+    }
+
+    /** Keep media running only for tiles that are on screen and visible. */
+    function syncLiveStreams() {
+        grid.querySelectorAll('.tile[data-camera-id]').forEach((tile) => {
+            const camera = cameraById.get(Number(tile.dataset.cameraId));
+            if (!camera) return;
+
+            if (!document.hidden && tile.dataset.inview === '1') {
+                startTileMedia(tile, camera);
+            } else {
+                stopTileMedia(tile, camera);
+            }
+        });
+    }
+
+    function observeTiles() {
+        const tiles = Array.from(grid.querySelectorAll('.tile[data-camera-id]'));
+        if (!tiles.length) return;
+
+        if (!('IntersectionObserver' in window)) {
+            tiles.forEach((tile) => {
+                tile.dataset.inview = '1';
+            });
+            syncLiveStreams();
+            return;
+        }
+
+        if (tileObserver) tileObserver.disconnect();
+        tileObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    entry.target.dataset.inview = entry.isIntersecting ? '1' : '0';
+                });
+                syncLiveStreams();
+            },
+            { threshold: 0.05 }
+        );
+
+        tiles.forEach((tile) => tileObserver.observe(tile));
+    }
+
     document.addEventListener('visibilitychange', () => {
+        syncLiveStreams();
         if (!document.hidden) refreshSnapshots();
     });
 
@@ -522,25 +622,60 @@
 
     async function startHls(tile, camera) {
         const video = tile.querySelector('video[data-hls]');
-        if (!video) return;
+        if (!video || players.has(camera.id)) return;
+
+        const notice = (message) => {
+            const overlay = tile.querySelector('.tile__offline');
+            if (!overlay) return;
+            overlay.textContent = message;
+            overlay.hidden = false;
+        };
 
         try {
             const response = await window.Argus.post(`${baseUrl}api/hls/${camera.id}`, {});
+
             if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = response.playlist;
-            } else {
-                const Hls = await loadHlsLibrary();
-                const player = new Hls({ liveSyncDurationCount: 3 });
-                player.loadSource(response.playlist);
-                player.attachMedia(video);
+                video.play().catch(() => {});
+                return;
             }
-            video.play().catch(() => {});
+
+            const Hls = await loadHlsLibrary();
+
+            // Chase the live edge: two segments of buffer, faster catch-up playback.
+            const player = new Hls({
+                lowLatencyMode: true,
+                liveSyncDurationCount: 2,
+                liveMaxLatencyDurationCount: 6,
+                maxLiveSyncPlaybackRate: 1.5,
+                enableWorker: true,
+                backBufferLength: 10,
+                maxBufferLength: 8,
+            });
+
+            players.set(camera.id, player);
+
+            player.on(Hls.Events.ERROR, (event, data) => {
+                if (!data.fatal) return;
+
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    player.startLoad();
+                    return;
+                }
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                    player.recoverMediaError();
+                    return;
+                }
+
+                destroyPlayer(camera.id);
+                notice('stream unavailable');
+            });
+
+            player.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+            player.loadSource(response.playlist);
+            player.attachMedia(video);
         } catch (error) {
-            const overlay = tile.querySelector('.tile__offline');
-            if (overlay) {
-                overlay.textContent = 'stream unavailable';
-                overlay.hidden = false;
-            }
+            notice('stream unavailable');
             console.warn('HLS error', error);
         }
     }

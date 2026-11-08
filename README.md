@@ -17,7 +17,8 @@ browser tab: dark, quiet, and readable from a distance.
 - **Three ways to get video into the browser:**
   - `MJPEG` — proxied multipart stream, lowest latency, lowest server CPU.
   - `Snapshot` — JPEG refresh loop, works with almost every camera.
-  - `HLS` — RTSP converted by ffmpeg for cameras that only speak RTSP.
+  - `HLS` — RTSP converted by ffmpeg for cameras that only speak RTSP, with
+    1–2 s segments so the wall stays a few seconds behind live.
 - **Credentials stay on the server.** Camera passwords are AES-256-GCM encrypted
   in MySQL and never reach the browser: every frame is fetched through
   `stream.php` after an access check.
@@ -33,6 +34,12 @@ browser tab: dark, quiet, and readable from a distance.
 - **Connection check after every save.** A new camera is probed immediately and
   the result comes with concrete fix suggestions instead of a bare error.
 - **Snapshot download** straight from a tile.
+- **Health history.** Every probe is sampled into `camera_checks`, so **Health**
+  shows uptime, latency and estimated downtime per camera, with CSV export of the
+  raw samples or an aggregated summary.
+- **ONVIF discovery.** Scan the LAN (WS-Discovery) or type a camera address, read
+  its media profiles and add the main or sub-stream straight from the table.
+- **CSV exports** for the activity log, the error log and the health history.
 
 ## Requirements
 
@@ -187,7 +194,53 @@ HLS source: `http://10.0.0.9:8080/live/ch1.m3u8`.
   *Settings* (2–60s). Good for larger walls and slower cameras.
 - **HLS** — for RTSP-only cameras. Requires ffmpeg on the server. Each active
   camera runs one ffmpeg process (`-c:v copy`, no transcoding) writing a rolling
-  playlist in `storage/hls/`.
+  playlist in `storage/hls/`. Segment length is *Settings → HLS segment length*
+  (1–6 s, default 2); `split_by_time` keeps segments short even when the camera
+  only emits a keyframe every few seconds, and the player starts two segments
+  behind the live edge in low-latency mode. Expect roughly `2 × segment length`
+  seconds behind live, so 1 s segments land around 2–3 s.
+
+### Camera health
+
+Each probe stores a sample in `camera_checks` — at most one per minute per camera
+while the state is steady, plus one immediately on every online/offline change.
+**Health** in the sidebar shows uptime for 24 h, 7 d or 14 d, average latency,
+estimated downtime and an hourly strip per camera, and exports the raw samples or
+a per-camera summary as CSV. History is kept for 14 days; `php scripts/cleanup.php`
+prunes older rows (run it from cron, it also stops idle HLS converters).
+
+Downtime is estimated from samples (one sample ≈ one minute), so a camera that is
+never watched shows little history until the wall or the status poll probes it.
+
+### ONVIF discovery
+
+**Discover** sends a WS-Discovery multicast probe to `239.255.255.250:3702` and
+lists the cameras that answer. Cameras behind a router, VLAN or Docker bridge
+never answer multicast — type their address (`10.0.0.20`) instead and press
+*Load profiles*.
+
+For each device Argus reads `GetProfiles` plus the stream and snapshot URI of
+every profile, then labels the largest one **Main** and the rest **Sub**. Add the
+sub-stream for a large wall (less bandwidth and CPU) and the main stream for the
+camera you actually watch. Passwords typed for the lookup are not kept: enter
+them again in the add form, where they are encrypted into the camera record.
+
+WS-Discovery needs UDP 3702 outbound and the replies back on an ephemeral port;
+Windows Firewall may ask once. Nothing is scanned automatically — the button is
+the only thing that sends packets.
+
+### Performance and low latency
+
+The wall starts media only for tiles that are on screen while the browser tab is
+visible. Off-screen tiles are released — MJPEG connections dropped, ffmpeg HLS
+players destroyed, snapshot refresh paused — and restart when they scroll back
+into view, so a large wall does not keep every decoder and camera connection
+alive in the background.
+
+For the lowest latency on the same hardware: use **MJPEG** where the camera
+offers it (~0.5 s, no transcoding), keep **HLS** segments at 1–2 s with the
+camera's I-frame interval at 1–2 s, and give the server enough PHP workers (one
+per concurrently streamed MJPEG tile).
 
 ### PTZ
 

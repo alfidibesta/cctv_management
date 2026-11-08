@@ -36,4 +36,57 @@ final class ActivityController extends Controller
             'logExists' => is_file($logFile) && (int) @filesize($logFile) > 0,
         ]);
     }
+
+    /** CSV export of the audit trail or of the JSON error log. */
+    public function export(): void
+    {
+        Auth::requireAdmin();
+
+        $source = (string) ($_GET['source'] ?? 'activity') === 'errors' ? 'errors' : 'activity';
+        $level = (string) ($_GET['level'] ?? '');
+        if (!in_array($level, ['', 'error', 'warning', 'info', 'debug'], true)) {
+            $level = '';
+        }
+
+        $suffix = gmdate('Ymd-His');
+
+        if ($source === 'errors') {
+            $rows = [];
+            foreach (array_reverse(Logger::tail(5000, $level)) as $entry) {
+                $rows[] = [
+                    $entry['time'] ?? '',
+                    $entry['level'] ?? '',
+                    $entry['message'] ?? '',
+                    isset($entry['context']) ? json_encode($entry['context'], JSON_UNESCAPED_SLASHES) : '',
+                ];
+            }
+
+            Activity::log('log.export', 'Exported error log CSV (' . count($rows) . ' rows)');
+
+            csv_response(
+                'argus-errors-' . $suffix . '.csv',
+                ['Time (UTC)', 'Level', 'Message', 'Context'],
+                $rows
+            );
+        }
+
+        $rows = [];
+        foreach (array_reverse(Activity::export(20000)) as $entry) {
+            $rows[] = [
+                $entry['created_at'],
+                $entry['user_name'],
+                $entry['action'],
+                $entry['description'],
+                $entry['ip'],
+            ];
+        }
+
+        Activity::log('log.export', 'Exported activity log CSV (' . count($rows) . ' rows)');
+
+        csv_response(
+            'argus-activity-' . $suffix . '.csv',
+            ['When (UTC)', 'Actor', 'Action', 'Detail', 'IP'],
+            $rows
+        );
+    }
 }

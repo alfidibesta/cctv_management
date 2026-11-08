@@ -260,3 +260,33 @@ if (!function_exists('status_label')) {
         };
     }
 }
+
+if (!function_exists('csv_response')) {
+    /**
+     * Stream an array of rows as a CSV download (UTF-8 BOM so Excel keeps accents).
+     *
+     * @param array<int, string> $header
+     * @param iterable<int, array<int, mixed>> $rows
+     */
+    function csv_response(string $filename, array $header, iterable $rows): never
+    {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store');
+
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            exit;
+        }
+
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, $header);
+
+        foreach ($rows as $row) {
+            fputcsv($out, $row);
+        }
+
+        fclose($out);
+        exit;
+    }
+}

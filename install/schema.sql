@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS activity_log (
     CONSTRAINT activity_user_fk FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS camera_checks (
+    id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    camera_id  INT UNSIGNED NOT NULL,
+    status     ENUM('online','offline','unknown') NOT NULL DEFAULT 'unknown',
+    latency_ms INT UNSIGNED NULL,
+    error      VARCHAR(255) NULL,
+    checked_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY camera_checks_camera_time_idx (camera_id, checked_at),
+    CONSTRAINT camera_checks_camera_fk FOREIGN KEY (camera_id) REFERENCES cameras (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS login_attempts (
     id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     email      VARCHAR(190) NOT NULL,
@@ -123,5 +135,6 @@ INSERT IGNORE INTO settings (`key`, `value`) VALUES
     ('verify_tls', '0'),
     ('ffmpeg_path', 'ffmpeg'),
     ('hls_idle_minutes', '15'),
+    ('hls_segment_seconds', '2'),
     ('status_interval', '20'),
     ('wall_title', 'Live wall');

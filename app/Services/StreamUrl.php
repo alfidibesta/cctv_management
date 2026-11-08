@@ -66,6 +66,14 @@ final class StreamUrl
             'ptz'      => '',
             'hint'     => 'Any camera exposing a JPEG snapshot or MJPEG stream over HTTP.',
         ],
+        'onvif' => [
+            'label'    => 'ONVIF (profile URI)',
+            'snapshot' => '',
+            'mjpeg'    => '',
+            'rtsp'     => '',
+            'ptz'      => '',
+            'hint'     => 'Added from Discover: the media profile URI is already stored.',
+        ],
         'demo' => [
             'label'    => 'Demo feed',
             'snapshot' => '',
@@ -140,7 +148,7 @@ final class StreamUrl
         // Any absolute stream URL (rtsp/rtmp/http/file) is used verbatim so a
         // camera can point at an NVR or an HTTP-FLV/HLS source as well.
         if (preg_match('#^(rtsp|rtsps|rtmp|https?|file)://#i', $path)) {
-            return self::fill($path, $camera);
+            return self::withCredentials(self::fill($path, $camera), $camera);
         }
 
         $user = (string) ($camera['username'] ?? '');
@@ -156,6 +164,31 @@ final class StreamUrl
             (int) ($camera['rtsp_port'] ?: 554),
             self::fill($path, $camera)
         );
+    }
+
+    /**
+     * ONVIF returns absolute rtsp:// URIs without credentials. Inject the stored
+     * (encrypted) camera credentials so ffmpeg can authenticate.
+     */
+    private static function withCredentials(string $url, array $camera): string
+    {
+        if (!preg_match('#^rtsps?://#i', $url)) {
+            return $url;
+        }
+
+        $user = (string) ($camera['username'] ?? '');
+        if ($user === '') {
+            return $url;
+        }
+
+        $parts = parse_url($url);
+        if (!$parts || !empty($parts['user']) || empty($parts['host'])) {
+            return $url;
+        }
+
+        $auth = rawurlencode($user) . ':' . rawurlencode(Crypto::decrypt($camera['password_enc'] ?? null)) . '@';
+
+        return (string) preg_replace('#://#', '://' . $auth, $url, 1);
     }
 
     public static function ptzUrl(array $camera, string $command, float $speed = 0.5, ?int $preset = null): ?string

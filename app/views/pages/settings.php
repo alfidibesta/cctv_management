@@ -120,6 +120,16 @@ $check = static function (bool $ok): string {
                            value="<?= (int) $settings['hls_idle_minutes'] ?>">
                 </label>
 
+                <label class="field">
+                    <span class="field__label">HLS segment length (seconds)</span>
+                    <input class="input" type="number" name="hls_segment_seconds" min="1" max="6"
+                           value="<?= (int) $settings['hls_segment_seconds'] ?>">
+                    <span class="field__hint">
+                        Short segments cut delay: 1–2 s feels live, 4–6 s is gentler on bandwidth.
+                        Keep the camera I-frame interval at 1–2 s so short segments stay playable.
+                    </span>
+                </label>
+
                 <label class="switch switch--wide">
                     <input type="checkbox" name="verify_tls" value="1" <?= checked($settings['verify_tls'] === '1') ?>>
                     <span class="switch__track"></span>

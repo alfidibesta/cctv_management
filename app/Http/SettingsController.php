@@ -55,6 +55,7 @@ final class SettingsController extends Controller
             'verify_tls'       => $this->bool('verify_tls') ? '1' : '0',
             'ffmpeg_path'      => mb_substr((string) $this->input('ffmpeg_path', 'ffmpeg'), 0, 255),
             'hls_idle_minutes' => (string) max(1, min(240, $this->int('hls_idle_minutes', 15))),
+            'hls_segment_seconds' => (string) max(1, min(6, $this->int('hls_segment_seconds', 2))),
         ]);
 
         Snapshot::storageDir('cache');

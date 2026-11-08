@@ -21,6 +21,18 @@ $entries = $entries ?? [];
                 : 'Sign-ins, camera changes, checks and PTZ commands — the last 200 events.' ?>
         </p>
     </div>
+    <div class="page-head__actions">
+        <?php if ($tab === 'errors'): ?>
+            <a class="btn btn--ghost btn--sm"
+               href="<?= e(url('/activity/export.csv?source=errors' . ($level !== '' ? '&level=' . $level : ''))) ?>">
+                <?= icon('download') ?> Export CSV
+            </a>
+        <?php else: ?>
+            <a class="btn btn--ghost btn--sm" href="<?= e(url('/activity/export.csv')) ?>">
+                <?= icon('download') ?> Export CSV
+            </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <nav class="tabs" aria-label="Log views">

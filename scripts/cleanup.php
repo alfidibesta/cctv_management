@@ -24,6 +24,9 @@ if (!Config::installed()) {
 $stopped = Hls::cleanupIdle();
 echo 'Stopped ' . $stopped . ' idle HLS converter(s).', PHP_EOL;
 
+$prunedChecks = \Argus\Services\Health::prune();
+echo 'Pruned ' . $prunedChecks . ' camera health sample(s).', PHP_EOL;
+
 $cacheDir = BASE_PATH . '/storage/cache';
 $pruned = 0;
 $deadline = time() - 86400;

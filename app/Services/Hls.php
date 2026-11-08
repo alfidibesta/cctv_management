@@ -53,6 +53,12 @@ final class Hls
         return self::binary() !== null;
     }
 
+    /** Segment length in seconds. Short segments are what keep HLS latency low. */
+    public static function segmentSeconds(): int
+    {
+        return max(1, min(6, Settings::int('hls_segment_seconds', 2)));
+    }
+
     /**
      * Resolve a working ffmpeg executable once per request.
      *
@@ -127,6 +133,19 @@ final class Hls
     public static function ensure(array $camera): array
     {
         $cameraId = (int) $camera['id'];
+        $dir = self::dir($cameraId);
+        $playlist = $dir . '/index.m3u8';
+
+        // Already running: return before binary resolution, which execs ffmpeg
+        // once per candidate. A wall of HLS tiles would pay that cost per tile.
+        if (self::isRunning($cameraId)) {
+            return [
+                'ok'              => true,
+                'playlist'        => $playlist,
+                'running'         => true,
+                'segment_seconds' => self::segmentSeconds(),
+            ];
+        }
 
         $ffmpeg = self::binary();
         if ($ffmpeg === null) {
@@ -139,13 +158,6 @@ final class Hls
         $rtsp = StreamUrl::rtspUrl($camera);
         if ($rtsp === null) {
             return ['ok' => false, 'error' => 'No RTSP path configured for this camera.'];
-        }
-
-        $dir = self::dir($cameraId);
-        $playlist = $dir . '/index.m3u8';
-
-        if (self::isRunning($cameraId)) {
-            return ['ok' => true, 'playlist' => $playlist, 'running' => true];
         }
 
         // Fresh session: drop stale segments so the browser does not replay old video.
@@ -175,9 +187,13 @@ final class Hls
             '-c:v', 'copy',
             '-an',
             '-f', 'hls',
-            '-hls_time', '2',
+            '-hls_time', (string) self::segmentSeconds(),
             '-hls_list_size', '6',
-            '-hls_flags', 'delete_segments+omit_endlist+independent_segments',
+            // split_by_time caps a segment at hls_time even when the camera only
+            // emits a keyframe every few seconds; without it a 10 s GOP camera
+            // produces 10 s segments (measured) and the wall lags ~30 s.
+            // independent_segments cannot be combined with split_by_time.
+            '-hls_flags', 'delete_segments+omit_endlist+split_by_time',
             '-hls_segment_filename', $dir . '/seg%05d.ts',
             $playlist,
         ]);
@@ -197,18 +213,48 @@ final class Hls
         file_put_contents($dir . '/ffmpeg.pid', (string) $pid);
         file_put_contents($dir . '/started_at', (string) time());
 
-        return ['ok' => true, 'playlist' => $playlist, 'pid' => $pid, 'running' => false];
+        return [
+            'ok'              => true,
+            'playlist'        => $playlist,
+            'pid'             => $pid,
+            'running'         => false,
+            'segment_seconds' => self::segmentSeconds(),
+        ];
     }
 
-    /** Wait briefly for the first playlist so the player does not open empty. */
-    public static function waitForPlaylist(int $cameraId, float $seconds = 7.0): bool
+    /**
+     * A playlist alone is not enough: ffmpeg writes one with an empty segment
+     * before the first keyframe arrives, and a player opening that shows nothing.
+     */
+    public static function hasPlayableSegment(int $cameraId): bool
     {
         $playlist = self::playlist($cameraId);
+        if (!is_file($playlist)) {
+            return false;
+        }
+
+        $body = @file_get_contents($playlist);
+        if (!is_string($body) || !str_contains($body, '.ts')) {
+            return false;
+        }
+
+        foreach (glob(self::dir($cameraId) . '/seg*.ts') ?: [] as $segment) {
+            if (filesize($segment) > 1000) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Wait briefly for the first decodable segment so the player does not open empty. */
+    public static function waitForPlaylist(int $cameraId, float $seconds = 8.0): bool
+    {
         $deadline = microtime(true) + $seconds;
 
         while (microtime(true) < $deadline) {
-            clearstatcache(true, $playlist);
-            if (is_file($playlist) && filesize($playlist) > 40) {
+            clearstatcache();
+            if (self::hasPlayableSegment($cameraId)) {
                 return true;
             }
 
@@ -216,10 +262,10 @@ final class Hls
                 return false;
             }
 
-            usleep(250000);
+            usleep(200000);
         }
 
-        return is_file($playlist);
+        return self::hasPlayableSegment($cameraId);
     }
 
     public static function stop(int $cameraId): void

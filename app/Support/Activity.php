@@ -38,4 +38,18 @@ final class Activity
              LIMIT {$limit}"
         );
     }
+
+    /** Newest-first rows for the CSV export (larger limit than the page). */
+    public static function export(int $limit = 5000): array
+    {
+        $limit = max(1, min($limit, 50000));
+
+        return Db::all(
+            "SELECT a.created_at, COALESCE(u.name, 'System') AS user_name, a.action, a.description, a.ip
+             FROM activity_log a
+             LEFT JOIN users u ON u.id = a.user_id
+             ORDER BY a.id DESC
+             LIMIT {$limit}"
+        );
+    }
 }

@@ -37,6 +37,12 @@ final class Hls
         }
 
         $pid = (int) trim((string) file_get_contents($pidFile));
+
+        return self::alive($pid);
+    }
+
+    private static function alive(int $pid): bool
+    {
         if ($pid <= 0) {
             return false;
         }
@@ -46,6 +52,22 @@ final class Hls
         }
 
         return is_dir('/proc/' . $pid);
+    }
+
+    /** Wait for a process to disappear, so its camera session is released. */
+    private static function waitForExit(int $pid, float $seconds): bool
+    {
+        $deadline = microtime(true) + $seconds;
+
+        while (microtime(true) < $deadline) {
+            if (!self::alive($pid)) {
+                return true;
+            }
+
+            usleep(50000);
+        }
+
+        return !self::alive($pid);
     }
 
     public static function isAvailable(): bool
@@ -315,14 +337,20 @@ final class Hls
     {
         $dir = self::dir($cameraId);
         $pidFile = $dir . '/ffmpeg.pid';
+        $pid = is_file($pidFile) ? (int) trim((string) file_get_contents($pidFile)) : 0;
 
-        if (is_file($pidFile)) {
-            $pid = (int) trim((string) file_get_contents($pidFile));
-            if ($pid > 0) {
-                @exec('kill ' . escapeshellarg((string) $pid) . ' 2>/dev/null');
+        if (self::alive($pid)) {
+            @exec('kill ' . escapeshellarg((string) $pid) . ' 2>/dev/null');
+
+            // Cameras often accept a single RTSP client, so the next converter
+            // must not start while this one still holds the session.
+            if (!self::waitForExit($pid, 2.0)) {
+                @exec('kill -9 ' . escapeshellarg((string) $pid) . ' 2>/dev/null');
+                self::waitForExit($pid, 1.0);
             }
-            @unlink($pidFile);
         }
+
+        @unlink($pidFile);
 
         foreach (glob($dir . '/seg*.ts') ?: [] as $segment) {
             @unlink($segment);

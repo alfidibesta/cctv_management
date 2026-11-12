@@ -642,6 +642,23 @@
 
             const Hls = await loadHlsLibrary();
 
+            // A TV or old browser without Media Source cannot play HLS at all.
+            // MJPEG needs nothing but an <img>, so use that instead of showing
+            // the tile as unavailable.
+            if (typeof Hls.isSupported === 'function' && !Hls.isSupported()) {
+                const media = tile.querySelector('.tile__media');
+                const overlay = tile.querySelector('.tile__offline');
+
+                if (media && camera.mjpeg_url) {
+                    media.innerHTML = `<img alt="${esc(camera.name)}" src="${esc(camera.mjpeg_url)}">`;
+                    if (overlay) overlay.hidden = true;
+                    return;
+                }
+
+                notice('this browser cannot play HLS');
+                return;
+            }
+
             // Low latency first: one segment of buffer, 2x catch-up. 1 s
             // segments stall easily on a slow link, so a fatal error retries the
             // same tile once with a deeper, stability-first buffer.
@@ -690,7 +707,11 @@
             player.loadSource(response.playlist);
             player.attachMedia(video);
         } catch (error) {
-            notice('stream unavailable');
+            // Show the server's reason when it has one: "stream unavailable"
+            // alone leaves nobody able to tell a credential error from a stall.
+            const payload = (error && error.payload) || {};
+            const reason = payload.error || payload.detail || '';
+            notice(reason ? `stream unavailable — ${String(reason).slice(0, 90)}` : 'stream unavailable');
             console.warn('HLS error', error);
         }
     }

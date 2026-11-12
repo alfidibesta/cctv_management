@@ -620,7 +620,7 @@
         return hlsLibraryPromise;
     }
 
-    async function startHls(tile, camera) {
+    async function startHls(tile, camera, stable = false) {
         const video = tile.querySelector('video[data-hls]');
         if (!video || players.has(camera.id)) return;
 
@@ -642,15 +642,24 @@
 
             const Hls = await loadHlsLibrary();
 
-            // Chase the live edge: two segments of buffer, faster catch-up playback.
-            const player = new Hls({
-                lowLatencyMode: true,
-                liveSyncDurationCount: 2,
+            // Low latency first: one segment of buffer, 2x catch-up. 1 s
+            // segments stall easily on a slow link, so a fatal error retries the
+            // same tile once with a deeper, stability-first buffer.
+            const player = new Hls(stable ? {
+                lowLatencyMode: false,
+                liveSyncDurationCount: 3,
                 liveMaxLatencyDurationCount: 6,
-                maxLiveSyncPlaybackRate: 1.5,
+                maxBufferLength: 10,
+                backBufferLength: 6,
                 enableWorker: true,
-                backBufferLength: 10,
-                maxBufferLength: 8,
+            } : {
+                lowLatencyMode: true,
+                liveSyncDurationCount: 1,
+                liveMaxLatencyDurationCount: 4,
+                maxLiveSyncPlaybackRate: 2,
+                enableWorker: true,
+                backBufferLength: 4,
+                maxBufferLength: 4,
             });
 
             players.set(camera.id, player);
@@ -668,6 +677,12 @@
                 }
 
                 destroyPlayer(camera.id);
+
+                if (!stable) {
+                    startHls(tile, camera, true);
+                    return;
+                }
+
                 notice('stream unavailable');
             });
 

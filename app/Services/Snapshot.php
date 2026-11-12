@@ -75,7 +75,6 @@ final class Snapshot
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $contentType = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         $error = curl_error($ch);
-        curl_close($ch);
 
         $latency = (int) round((microtime(true) - $start) * 1000);
 
@@ -285,7 +284,6 @@ final class Snapshot
 
                     unset($pending[(int) $ch]);
                     curl_multi_remove_handle($multi, $ch);
-                    curl_close($ch);
                 }
             } while ($active > 0 && microtime(true) < $deadline);
 
@@ -296,7 +294,6 @@ final class Snapshot
                 \Argus\Repositories\Cameras::noteStatusChange($meta['camera'], 'offline', 'Probe timed out.');
                 $results[$id] = ['status' => 'offline', 'latency_ms' => null, 'error' => 'Probe timed out.'];
                 curl_multi_remove_handle($multi, $hz);
-                curl_close($hz);
             }
 
             curl_multi_close($multi);

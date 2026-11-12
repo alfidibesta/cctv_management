@@ -45,7 +45,7 @@ browser tab: dark, quiet, and readable from a distance.
 
 | Requirement | Notes |
 | --- | --- |
-| PHP 8.1+ | `pdo_mysql`, `curl`, `openssl`, `mbstring` |
+| PHP 8.1 – 8.5 | `pdo_mysql`, `curl`, `openssl`, `mbstring`. PHP 8.5 is supported: the deprecated `PDO::MYSQL_ATTR_*` constant and the no-op `curl_close()` calls are gone |
 | MySQL 5.7+ / MariaDB 10.4+ | utf8mb4 |
 | ffmpeg | optional, only for cameras in **HLS** mode. Can be dropped into `bin/` — see below |
 | Web server | Apache with `mod_rewrite`, nginx, or PHP's built-in server |
@@ -242,6 +242,14 @@ offers it (~0.5 s, no transcoding), keep **HLS** segments at 1–2 s with the
 camera's I-frame interval at 1–2 s, and give the server enough PHP workers (one
 per concurrently streamed MJPEG tile).
 
+The HLS worker is tuned for that: ffmpeg probes for 1 s / 1 MB instead of the
+default 2 s / 2 MB, uses `-fflags nobuffer -flags low_delay` for live RTSP/RTMP
+inputs (never for file or HTTP sources, where they discard packets while probing
+and produce an empty stream), and keeps a three-segment playlist. The browser
+starts one segment behind the live edge and may play at up to 2× speed to catch
+up, so a 1 s segment setting lands roughly 1.5–2.5 s behind live; 2 s segments
+land around 3–4 s.
+
 ### PTZ
 
 PTZ uses a simple GET command URL. `{cmd}` is replaced with `up`, `down`, `left`,
@@ -348,11 +356,15 @@ config/              config.php written by the installer
 
 ## Verified in this build
 
-Exercised against MariaDB 11.4 with PHP 8.4: installer, sign-in, throttled
-failures, camera CRUD and validation, encrypted credential storage, snapshot
-proxy, MJPEG proxy (multipart passthrough), ffmpeg HLS playlist + segment
-serving, PTZ error handling, viewer group isolation, CSRF rejection, layout
-persistence and 404/403 handling.
+Exercised against MariaDB 11.4 with PHP 8.4.23 and PHP 8.5.8: installer, sign-in,
+throttled failures, camera CRUD and validation, encrypted credential storage,
+snapshot proxy, MJPEG proxy (multipart passthrough), ffmpeg HLS playlist +
+segment serving, PTZ error handling, viewer group isolation, CSRF rejection,
+layout persistence, the health history and CSV exports, ONVIF profile parsing,
+the `create-admin` CLI and 404/403 handling.
+
+On PHP 8.5.8 the whole end-to-end suite runs with `error_reporting=E_ALL` and
+writes no deprecation notice to the PHP error log or to `app.log`.
 
 Also verified in a real browser against this build: dark and light themes, the
 compact density, sidebar rail mode, collapsible cards (state survives reload),

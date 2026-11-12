@@ -174,7 +174,6 @@ function serveMjpeg(array $camera): void
     $ok = curl_exec($ch);
     $error = curl_error($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
 
     if ($ok === false || $status >= 400) {
         Cameras::recordStatus((int) $camera['id'], 'offline', null, $error !== '' ? $error : 'MJPEG HTTP ' . $status);

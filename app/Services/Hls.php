@@ -128,10 +128,14 @@ final class Hls
     /**
      * Start the transcoder if it is not already running.
      *
+     * @param array{low_latency?: bool} $options Pass low_latency=false for the
+     *        compatibility profile: buffered input, 2 s/2 MB probes and a longer
+     *        playlist. Some cameras lose their SPS/PPS without input buffering.
      * @return array{ok: bool, playlist?: string, error?: string}
      */
-    public static function ensure(array $camera): array
+    public static function ensure(array $camera, array $options = []): array
     {
+        $lowLatency = (bool) ($options['low_latency'] ?? true);
         $cameraId = (int) $camera['id'];
         $dir = self::dir($cameraId);
         $playlist = $dir . '/index.m3u8';
@@ -139,12 +143,19 @@ final class Hls
         // Already running: return before binary resolution, which execs ffmpeg
         // once per candidate. A wall of HLS tiles would pay that cost per tile.
         if (self::isRunning($cameraId)) {
-            return [
-                'ok'              => true,
-                'playlist'        => $playlist,
-                'running'         => true,
-                'segment_seconds' => self::segmentSeconds(),
-            ];
+            // The process can outlive a dropped camera and stop writing
+            // segments, leaving a playlist that never advances. Restart it
+            // instead of handing the player a frozen stream.
+            if (self::isFresh($cameraId)) {
+                return [
+                    'ok'              => true,
+                    'playlist'        => $playlist,
+                    'running'         => true,
+                    'segment_seconds' => self::segmentSeconds(),
+                ];
+            }
+
+            self::stop($cameraId);
         }
 
         $ffmpeg = self::binary();
@@ -174,6 +185,16 @@ final class Hls
             '-loglevel', 'error',
         ];
 
+        $liveInput = (bool) preg_match('#^(rtsps?|rtmps?)://#i', $rtsp);
+
+        // nobuffer/low_delay only make sense for a live source. On a file or
+        // progressive HTTP source they discard packets while probing and the
+        // output ends up with no stream at all (measured).
+        // -avioflags direct is deliberately not used: it breaks HTTP inputs.
+        if ($liveInput && $lowLatency) {
+            $args = array_merge($args, ['-fflags', 'nobuffer', '-flags', 'low_delay']);
+        }
+
         // Only RTSP inputs accept the transport flag; HTTP/RTMP sources reject it.
         if (preg_match('#^rtsps?://#i', $rtsp)) {
             $args[] = '-rtsp_transport';
@@ -181,14 +202,17 @@ final class Hls
         }
 
         $args = array_merge($args, [
-            '-analyzeduration', '2000000',
-            '-probesize', '2000000',
+            // One second of analysis instead of two: a live RTSP camera no
+            // longer waits for 2 MB of data before the first segment is cut.
+            '-analyzeduration', $lowLatency ? '1000000' : '2000000',
+            '-probesize', $lowLatency ? '1000000' : '2000000',
             '-i', $rtsp,
             '-c:v', 'copy',
             '-an',
             '-f', 'hls',
             '-hls_time', (string) self::segmentSeconds(),
-            '-hls_list_size', '6',
+            // A short window keeps the player close to the live edge.
+            '-hls_list_size', $lowLatency ? '3' : '6',
             // split_by_time caps a segment at hls_time even when the camera only
             // emits a keyframe every few seconds; without it a 10 s GOP camera
             // produces 10 s segments (measured) and the wall lags ~30 s.
@@ -220,6 +244,25 @@ final class Hls
             'running'         => false,
             'segment_seconds' => self::segmentSeconds(),
         ];
+    }
+
+    /** True while the converter is still producing segments. */
+    private static function isFresh(int $cameraId): bool
+    {
+        $newest = 0;
+
+        foreach (glob(self::dir($cameraId) . '/seg*.ts') ?: [] as $segment) {
+            $newest = max($newest, (int) filemtime($segment));
+        }
+
+        if ($newest === 0) {
+            // No segment yet: allow the startup grace period before restarting.
+            $started = (int) @file_get_contents(self::dir($cameraId) . '/started_at');
+
+            return $started > 0 && (time() - $started) < 20;
+        }
+
+        return (time() - $newest) < 20;
     }
 
     /**

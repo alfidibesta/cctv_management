@@ -57,7 +57,6 @@ final class Ptz
         $body = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $error = curl_error($ch);
-        curl_close($ch);
 
         $latency = (int) round((microtime(true) - $start) * 1000);
 

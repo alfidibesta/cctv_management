@@ -93,17 +93,33 @@ final class ApiController extends Controller
         }
 
         if (!Hls::waitForPlaylist((int) $camera['id'], 8.0)) {
-            $log = @file_get_contents(Hls::dir((int) $camera['id']) . '/ffmpeg.log');
-            $detail = is_string($log) ? trim(substr($log, -320)) : '';
+            $detail = $this->ffmpegTail((int) $camera['id']);
 
-            Logger::warning('HLS playlist not ready', ['camera' => (int) $camera['id'], 'ffmpeg' => $detail]);
-            Activity::log('hls.failed', 'HLS playlist not ready for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
+            Logger::warning('HLS low-latency start failed, retrying in compatibility mode', [
+                'camera' => (int) $camera['id'],
+                'ffmpeg' => $detail,
+            ]);
 
-            $this->json([
-                'error'  => 'The camera stream did not start. Check the RTSP path and credentials.',
-                'detail' => $detail,
-                'steps'  => \Argus\Services\Diagnostics::stepsFor($detail !== '' ? $detail : 'rtsp timed out', $camera),
-            ], 422);
+            // Cameras that drop their SPS/PPS without input buffering fail with
+            // the low-latency flags. Retry once with the buffered profile before
+            // telling the wall the stream is unavailable.
+            Hls::stop((int) $camera['id']);
+            $retry = Hls::ensure($camera, ['low_latency' => false]);
+
+            if ($retry['ok'] && Hls::waitForPlaylist((int) $camera['id'], 8.0)) {
+                Activity::log('hls.started', 'HLS started in compatibility mode for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
+            } else {
+                $detail = $this->ffmpegTail((int) $camera['id']) ?: $detail;
+
+                Logger::warning('HLS playlist not ready', ['camera' => (int) $camera['id'], 'ffmpeg' => $detail]);
+                Activity::log('hls.failed', 'HLS playlist not ready for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
+
+                $this->json([
+                    'error'  => 'The camera stream did not start. Check the RTSP path and credentials.',
+                    'detail' => $detail,
+                    'steps'  => \Argus\Services\Diagnostics::stepsFor($detail !== '' ? $detail : 'rtsp timed out', $camera),
+                ], 422);
+            }
         }
 
         Activity::log('hls.started', 'HLS started for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
@@ -113,5 +129,13 @@ final class ApiController extends Controller
             'playlist'        => url('/stream.php?camera=' . (int) $camera['id'] . '&type=hls&file=index.m3u8'),
             'segment_seconds' => Hls::segmentSeconds(),
         ]);
+    }
+
+    /** Last lines of the ffmpeg log, for the error response and the app log. */
+    private function ffmpegTail(int $cameraId): string
+    {
+        $log = @file_get_contents(Hls::dir($cameraId) . '/ffmpeg.log');
+
+        return is_string($log) ? trim(substr($log, -320)) : '';
     }
 }

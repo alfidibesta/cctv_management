@@ -42,13 +42,23 @@ final class Db
             $config['charset'] ?? 'utf8mb4'
         );
 
-        return new PDO($dsn, (string) ($config['username'] ?? ''), (string) ($config['password'] ?? ''), [
+        $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
             PDO::ATTR_STRINGIFY_FETCHES  => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4',
-        ]);
+        ];
+
+        // PHP 8.5 deprecates the PDO::MYSQL_ATTR_* spellings in favour of the
+        // driver subclass constants, which exist from PHP 8.4. Older 8.1-8.3
+        // installs keep the legacy name, which is not deprecated there.
+        if (class_exists(\Pdo\Mysql::class)) {
+            $options[\Pdo\Mysql::ATTR_INIT_COMMAND] = 'SET NAMES utf8mb4';
+        } else {
+            $options[PDO::MYSQL_ATTR_INIT_COMMAND] = 'SET NAMES utf8mb4';
+        }
+
+        return new PDO($dsn, (string) ($config['username'] ?? ''), (string) ($config['password'] ?? ''), $options);
     }
 
     /** Test credentials without keeping the connection. */

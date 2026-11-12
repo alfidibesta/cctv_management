@@ -291,6 +291,22 @@ in `stream.php`.
 `cleanup.php` stops ffmpeg converters nobody is watching (default 15 idle
 minutes, configurable in Settings) and prunes snapshots older than a day.
 
+Need an account without the setup wizard (empty `users` table, forgotten
+password, restored database)? Create one — or reset an existing email — from the
+command line. The bcrypt hash is generated for you and the password is never
+echoed:
+
+```bash
+php scripts/create-admin.php                          # fully interactive
+php scripts/create-admin.php --email=admin@site.com --password='S3cret-pass'
+php scripts/create-admin.php --email=ops@site.com --role=operator --password='...'
+```
+
+Running it again with an existing email resets that account's password and role,
+so it doubles as a lockout fix. `--help` lists the options; on Windows use
+`C:\laragon\bin\php\php-8.x\php.exe scripts\create-admin.php`.
+
+
 Logs live in `storage/logs/`:
 
 | File | Contents |

@@ -13,7 +13,7 @@ $roleLabel = static fn (string $role): string => match ($role) {
     <div>
         <h2 class="page-head__title">Users &amp; roles</h2>
         <p class="page-head__sub">
-            Administrators configure everything, operators can control cameras and PTZ, viewers only see their groups.
+            Administrators configure everything, operators can manage cameras and the wall, viewers only see their groups.
         </p>
     </div>
     <div class="page-head__actions">
@@ -131,7 +131,7 @@ $roleLabel = static fn (string $role): string => match ($role) {
                         <span class="field__label">Role</span>
                         <select class="select" name="role" data-user-field="role">
                             <option value="viewer">Viewer — watch assigned groups</option>
-                            <option value="operator">Operator — all cameras + PTZ</option>
+                            <option value="operator">Operator — all cameras + wall</option>
                             <option value="admin">Administrator — full access</option>
                         </select>
                     </label>

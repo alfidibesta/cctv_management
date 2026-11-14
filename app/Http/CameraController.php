@@ -7,6 +7,7 @@ namespace Argus\Http;
 use Argus\Repositories\Cameras;
 use Argus\Repositories\Groups;
 use Argus\Services\Diagnostics;
+use Argus\Services\MediaServer;
 use Argus\Services\Snapshot;
 use Argus\Services\StreamUrl;
 use Argus\Support\Activity;
@@ -87,6 +88,7 @@ final class CameraController extends Controller
         $id = Cameras::create($data);
 
         Snapshot::clearCache($id);
+        $this->provisionMediaServer($id);
         Activity::log('camera.created', 'Added camera "' . $data['name'] . '"', 'camera', $id);
         Logger::info('camera.created', ['camera' => $id, 'host' => $data['host']]);
 
@@ -160,6 +162,7 @@ final class CameraController extends Controller
 
         Cameras::update((int) $id, $data);
         Snapshot::clearCache((int) $id);
+        $this->provisionMediaServer((int) $id);
         Activity::log('camera.updated', 'Updated camera "' . $data['name'] . '"', 'camera', (int) $id);
         flash('Camera updated.');
 
@@ -170,6 +173,10 @@ final class CameraController extends Controller
     {
         Auth::requireCameraManager();
         $camera = CameraGate::resolve((int) $id, true);
+
+        // Unregister the stream before the row disappears, so the media server
+        // does not keep pulling a camera nobody can see any more.
+        MediaServer::remove((int) $id);
 
         Cameras::delete((int) $id);
         Snapshot::clearCache((int) $id);
@@ -262,15 +269,16 @@ final class CameraController extends Controller
                 'snapshot_path' => $preset['snapshot_path'],
                 'mjpeg_path'    => $preset['mjpeg_path'],
                 'rtsp_path'     => $preset['rtsp_path'],
-                'ptz_path'      => $preset['ptz_path'],
-                'ptz_enabled'   => (int) ($preset['ptz_path'] !== ''),
                 'transport'     => 'tcp',
+                'latency_ms'    => max(50, min(2000, \Argus\Support\Settings::int('rtsp_latency_ms', 300))),
+                'frame_drop'    => \Argus\Support\Settings::bool('rtsp_frame_drop') ? 1 : 0,
                 'is_enabled'    => 1,
                 'sort_order'    => Cameras::nextSortOrder(),
                 'status'        => 'unknown',
             ]);
 
             if ($id > 0) {
+                $this->provisionMediaServer($id);
                 $created++;
             }
         }
@@ -306,9 +314,9 @@ final class CameraController extends Controller
             'snapshot_path' => $preset['snapshot_path'],
             'mjpeg_path'    => $preset['mjpeg_path'],
             'rtsp_path'     => $preset['rtsp_path'],
-            'ptz_path'      => $preset['ptz_path'],
-            'ptz_enabled'   => 0,
-            'transport'     => 'tcp',
+            'transport'     => \Argus\Services\Hls::transport([]),
+            'latency_ms'    => \Argus\Services\Hls::latencyMs([]),
+            'frame_drop'    => \Argus\Services\Hls::frameDrop([]) ? 1 : 0,
             'is_enabled'    => 1,
             'sort_order'    => 0,
             'status'        => 'unknown',
@@ -368,9 +376,9 @@ final class CameraController extends Controller
             'snapshot_path' => mb_substr((string) $this->input('snapshot_path', ''), 0, 255),
             'mjpeg_path'    => mb_substr((string) $this->input('mjpeg_path', ''), 0, 255),
             'rtsp_path'     => mb_substr((string) $this->input('rtsp_path', ''), 0, 255),
-            'ptz_path'      => mb_substr((string) $this->input('ptz_path', ''), 0, 255),
-            'ptz_enabled'   => $this->bool('ptz_enabled') ? 1 : 0,
             'transport'     => $this->input('transport', 'tcp') === 'udp' ? 'udp' : 'tcp',
+            'latency_ms'    => max(50, min(2000, $this->int('latency_ms', \Argus\Services\Hls::latencyMs([])))),
+            'frame_drop'    => $this->bool('frame_drop') ? 1 : 0,
             'is_enabled'    => $this->bool('is_enabled') ? 1 : 0,
         ];
 
@@ -382,5 +390,39 @@ final class CameraController extends Controller
         }
 
         return [$data, $errors];
+    }
+
+    /**
+     * Push the camera's RTSP source to go2rtc / MediaMTX after a save.
+     *
+     * Provisioning never blocks the save: an unreachable media server is
+     * recorded in the log and the wall falls back to MJPEG/HLS.
+     */
+    private function provisionMediaServer(int $cameraId): void
+    {
+        if (!MediaServer::enabled()) {
+            return;
+        }
+
+        $camera = Cameras::find($cameraId);
+        if (!$camera) {
+            return;
+        }
+
+        $result = MediaServer::provision($camera);
+
+        if (!$result['ok']) {
+            Logger::warning('Media server provisioning failed for "' . $camera['name'] . '"', [
+                'camera' => $cameraId,
+                'driver' => $result['driver'],
+                'error'  => $result['error'],
+            ]);
+
+            return;
+        }
+
+        if (empty($result['skipped'])) {
+            Activity::log('media.provisioned', 'Registered "' . $camera['name'] . '" on ' . strtoupper($result['driver']), 'camera', $cameraId);
+        }
     }
 }

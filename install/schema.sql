@@ -43,9 +43,10 @@ CREATE TABLE IF NOT EXISTS cameras (
     snapshot_path   VARCHAR(255) NOT NULL DEFAULT '',
     mjpeg_path      VARCHAR(255) NOT NULL DEFAULT '',
     rtsp_path       VARCHAR(255) NOT NULL DEFAULT '',
-    ptz_path        VARCHAR(255) NOT NULL DEFAULT '',
-    ptz_enabled     TINYINT(1) NOT NULL DEFAULT 0,
     transport       ENUM('tcp','udp') NOT NULL DEFAULT 'tcp',
+    latency_ms      SMALLINT UNSIGNED NOT NULL DEFAULT 300,
+    frame_drop      TINYINT(1) NOT NULL DEFAULT 1,
+    analytics_json  TEXT NULL,
     is_enabled      TINYINT(1) NOT NULL DEFAULT 1,
     sort_order      INT NOT NULL DEFAULT 0,
     status          ENUM('unknown','online','offline') NOT NULL DEFAULT 'unknown',
@@ -115,6 +116,20 @@ CREATE TABLE IF NOT EXISTS camera_checks (
     CONSTRAINT camera_checks_camera_fk FOREIGN KEY (camera_id) REFERENCES cameras (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS person_events (
+    id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    camera_id    INT UNSIGNED NOT NULL,
+    direction    ENUM('IN','OUT') NULL,
+    occupancy    SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    confidence   DECIMAL(5,2) NOT NULL DEFAULT 0,
+    occurred_at  DATETIME NOT NULL,
+    created_at   DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY person_events_camera_time_idx (camera_id, occurred_at),
+    KEY person_events_direction_idx (direction),
+    CONSTRAINT person_events_camera_fk FOREIGN KEY (camera_id) REFERENCES cameras (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS login_attempts (
     id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     email      VARCHAR(190) NOT NULL,
@@ -137,4 +152,8 @@ INSERT IGNORE INTO settings (`key`, `value`) VALUES
     ('hls_idle_minutes', '15'),
     ('hls_segment_seconds', '2'),
     ('status_interval', '20'),
+    ('rtsp_transport', 'tcp'),
+    ('rtsp_latency_ms', '300'),
+    ('rtsp_frame_drop', '1'),
+    ('schema_version', '2'),
     ('wall_title', 'Live wall');

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use Argus\Http\AccountController;
 use Argus\Http\ActivityController;
+use Argus\Http\AnalyticsController;
 use Argus\Http\ApiController;
 use Argus\Http\AuthController;
 use Argus\Http\CameraController;
+use Argus\Http\CredentialsController;
 use Argus\Http\DiscoveryController;
 use Argus\Http\GroupController;
 use Argus\Http\HealthController;
@@ -38,6 +40,7 @@ return static function (Router $router): void {
     $router->post('/cameras/{id}', [CameraController::class, 'update']);
     $router->post('/cameras/{id}/delete', [CameraController::class, 'delete']);
     $router->post('/cameras/{id}/test', [CameraController::class, 'test']);
+    $router->post('/cameras/{id}/credentials', [CredentialsController::class, 'show']);
 
     // -- groups -----------------------------------------------------------
     $router->get('/groups', [GroupController::class, 'index']);
@@ -53,6 +56,9 @@ return static function (Router $router): void {
 
     $router->get('/health', [HealthController::class, 'index']);
     $router->get('/health/export.csv', [HealthController::class, 'export']);
+
+    // -- people counting --------------------------------------------------
+    $router->get('/analytics', [AnalyticsController::class, 'index']);
 
     // -- users, settings, audit ------------------------------------------
     $router->get('/users', [UserController::class, 'index']);
@@ -71,6 +77,6 @@ return static function (Router $router): void {
 
     // -- json api ---------------------------------------------------------
     $router->get('/api/status', [ApiController::class, 'status']);
-    $router->post('/api/ptz/{id}', [ApiController::class, 'ptz']);
+    $router->post('/api/webrtc/{id}', [ApiController::class, 'webrtc']);
     $router->post('/api/hls/{id}', [ApiController::class, 'hls']);
 };

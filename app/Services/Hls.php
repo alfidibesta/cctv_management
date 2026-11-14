@@ -82,6 +82,43 @@ final class Hls
     }
 
     /**
+     * Latency target for a camera: per-camera value first, global setting next.
+     * 50–2000 ms, matching the slider in the camera form and Settings.
+     */
+    public static function latencyMs(array $camera): int
+    {
+        $value = (int) ($camera['latency_ms'] ?? 0);
+
+        if ($value <= 0) {
+            $value = Settings::int('rtsp_latency_ms', 300);
+        }
+
+        return max(50, min(2000, $value));
+    }
+
+    /** True when delayed frames should be discarded instead of queued. */
+    public static function frameDrop(array $camera): bool
+    {
+        if (array_key_exists('frame_drop', $camera) && $camera['frame_drop'] !== null) {
+            return (int) $camera['frame_drop'] === 1;
+        }
+
+        return Settings::bool('rtsp_frame_drop');
+    }
+
+    /** RTSP transport: per-camera choice, then the global default. */
+    public static function transport(array $camera): string
+    {
+        $transport = strtolower((string) ($camera['transport'] ?? ''));
+
+        if ($transport === '') {
+            $transport = strtolower((string) Settings::get('rtsp_transport', 'tcp'));
+        }
+
+        return $transport === 'udp' ? 'udp' : 'tcp';
+    }
+
+    /**
      * Resolve a working ffmpeg executable once per request.
      *
      * Order: the path configured in Settings, then bin/ffmpeg[.exe] inside the
@@ -162,6 +199,10 @@ final class Hls
         $dir = self::dir($cameraId);
         $playlist = $dir . '/index.m3u8';
 
+        $transport = self::transport($camera);
+        $latency = self::latencyMs($camera);
+        $frameDrop = self::frameDrop($camera);
+
         // Already running: return before binary resolution, which execs ffmpeg
         // once per candidate. A wall of HLS tiles would pay that cost per tile.
         if (self::isRunning($cameraId)) {
@@ -174,6 +215,9 @@ final class Hls
                     'playlist'        => $playlist,
                     'running'         => true,
                     'segment_seconds' => self::segmentSeconds(),
+                    'latency_ms'      => $latency,
+                    'transport'       => $transport,
+                    'frame_drop'      => $frameDrop,
                 ];
             }
 
@@ -199,7 +243,12 @@ final class Hls
         }
         @unlink($playlist);
 
-        $transport = ($camera['transport'] ?? 'tcp') === 'udp' ? 'udp' : 'tcp';
+        // Jitter buffer: the latency target is turned into ffmpeg's input
+        // buffering window. 50 ms is near-passthrough; 2000 ms tolerates a
+        // lossy link at the cost of delay.
+        $maxDelayMicros = $latency * 1000;
+        $analyseMicros = (string) max(200000, min(3000000, $maxDelayMicros * 2));
+        $probeBytes = (string) max(200000, min(2000000, $latency * 2000));
 
         $args = [
             $ffmpeg,
@@ -217,17 +266,28 @@ final class Hls
             $args = array_merge($args, ['-fflags', 'nobuffer', '-flags', 'low_delay']);
         }
 
+        // Drop corrupt packets as soon as they arrive instead of letting the
+        // decoder wait for a retransmission: this is what keeps a live wall
+        // real-time when the camera link is lossy.
+        if ($frameDrop && $liveInput) {
+            $args = array_merge($args, ['-fflags', '+discardcorrupt']);
+        }
+
         // Only RTSP inputs accept the transport flag; HTTP/RTMP sources reject it.
         if (preg_match('#^rtsps?://#i', $rtsp)) {
             $args[] = '-rtsp_transport';
             $args[] = $transport;
+            $args[] = '-max_delay';
+            $args[] = (string) $maxDelayMicros;
+            $args[] = '-rw_timeout';
+            $args[] = (string) max(2000000, $maxDelayMicros * 4);
         }
 
         $args = array_merge($args, [
-            // One second of analysis instead of two: a live RTSP camera no
-            // longer waits for 2 MB of data before the first segment is cut.
-            '-analyzeduration', $lowLatency ? '1000000' : '2000000',
-            '-probesize', $lowLatency ? '1000000' : '2000000',
+            // Scale the analysis window with the latency target instead of
+            // always waiting for 1–2 MB of data before the first segment.
+            '-analyzeduration', $analyseMicros,
+            '-probesize', $probeBytes,
             '-i', $rtsp,
             '-c:v', 'copy',
             '-an',
@@ -265,6 +325,9 @@ final class Hls
             'pid'             => $pid,
             'running'         => false,
             'segment_seconds' => self::segmentSeconds(),
+            'latency_ms'      => $latency,
+            'transport'       => $transport,
+            'frame_drop'      => $frameDrop,
         ];
     }
 

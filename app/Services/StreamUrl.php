@@ -23,7 +23,6 @@ final class StreamUrl
             'snapshot' => '/cgi-bin/encoder?SNAPSHOT',
             'mjpeg'    => '/-wvhttp-01-/stream/Mjpeg?framerate=25',
             'rtsp'     => '/onvif1',
-            'ptz'      => '/cgi-bin/ptz?move={cmd}&speed={speed}',
             'hint'     => 'ACTi firmware with /cgi-bin/encoder CGI endpoints.',
         ],
         'acti_onvif' => [
@@ -31,7 +30,6 @@ final class StreamUrl
             'snapshot' => '/onvif-http/snapshot?Profile_{channel}',
             'mjpeg'    => '/cgi-bin/mjpeg?stream=1',
             'rtsp'     => '/onvif-media/media.amp?profile=profile_{channel}_h264&sessiontimeout=60&streamtype=unicast',
-            'ptz'      => '',
             'hint'     => 'Newer ACTi firmware and ONVIF-compatible recorders.',
         ],
         'hikvision' => [
@@ -39,7 +37,6 @@ final class StreamUrl
             'snapshot' => '/ISAPI/Streaming/channels/{channel}01/picture',
             'mjpeg'    => '/Streaming/channels/{channel}01/httpPreview',
             'rtsp'     => '/Streaming/Channels/{channel}01',
-            'ptz'      => '',
             'hint'     => 'Hikvision cameras, NVRs and OEM equivalents.',
         ],
         'dahua' => [
@@ -47,7 +44,6 @@ final class StreamUrl
             'snapshot' => '/cgi-bin/snapshot.cgi?channel={channel}',
             'mjpeg'    => '/cgi-bin/mjpg/video.cgi?channel={channel}&subtype=1',
             'rtsp'     => '/cam/realmonitor?channel={channel}&subtype=0',
-            'ptz'      => '',
             'hint'     => 'Dahua cameras, NVRs and OEM equivalents.',
         ],
         'axis' => [
@@ -55,7 +51,6 @@ final class StreamUrl
             'snapshot' => '/axis-cgi/jpg/image.cgi',
             'mjpeg'    => '/axis-cgi/mjpg/video.cgi',
             'rtsp'     => '/axis-media/media.amp',
-            'ptz'      => '/axis-cgi/com/ptz.cgi?move={cmd}',
             'hint'     => 'Axis cameras and encoders.',
         ],
         'generic' => [
@@ -63,7 +58,6 @@ final class StreamUrl
             'snapshot' => '/snapshot.jpg',
             'mjpeg'    => '/video.mjpg',
             'rtsp'     => '/stream1',
-            'ptz'      => '',
             'hint'     => 'Any camera exposing a JPEG snapshot or MJPEG stream over HTTP.',
         ],
         'onvif' => [
@@ -71,7 +65,6 @@ final class StreamUrl
             'snapshot' => '',
             'mjpeg'    => '',
             'rtsp'     => '',
-            'ptz'      => '',
             'hint'     => 'Added from Discover: the media profile URI is already stored.',
         ],
         'demo' => [
@@ -79,20 +72,8 @@ final class StreamUrl
             'snapshot' => '',
             'mjpeg'    => '',
             'rtsp'     => '',
-            'ptz'      => '',
             'hint'     => 'Generated placeholder used to try the wall without hardware.',
         ],
-    ];
-
-    public const PTZ_COMMANDS = [
-        'up'       => 'Tilt up',
-        'down'     => 'Tilt down',
-        'left'     => 'Pan left',
-        'right'    => 'Pan right',
-        'zoom_in'  => 'Zoom in',
-        'zoom_out' => 'Zoom out',
-        'home'     => 'Home position',
-        'stop'     => 'Stop',
     ];
 
     public static function driverLabel(string $driver): string
@@ -133,8 +114,53 @@ final class StreamUrl
         return self::resolve($path, $camera);
     }
 
-    /** RTSP URL with credentials embedded, used only by the ffmpeg worker. */
+    /**
+     * RTSP URL with credentials embedded, used by ffmpeg and the media server.
+     *
+     * Credentials are percent-encoded with rawurlencode(), the PHP equivalent
+     * of encodeURIComponent (RFC 3986): a password such as "aaa19!" becomes
+     * "aaa19%21" and is never mangled into "aaa19 21".
+     */
     public static function rtspUrl(array $camera): ?string
+    {
+        return self::sanitizedRtspUrl($camera);
+    }
+
+    /** Explicitly named alias: the credential inspector shows this exact URI. */
+    public static function sanitizedRtspUrl(array $camera): ?string
+    {
+        if (self::isDemo($camera)) {
+            return null;
+        }
+
+        $path = self::rtspPath($camera);
+        if ($path === null) {
+            return null;
+        }
+
+        // Any absolute stream URL (rtsp/rtmp/http/file) is used verbatim so a
+        // camera can point at an NVR or an HTTP-FLV/HLS source as well.
+        if (preg_match('#^(rtsp|rtsps|rtmp|https?|file)://#i', $path)) {
+            return self::withCredentials($path, $camera);
+        }
+
+        $user = (string) ($camera['username'] ?? '');
+        $pass = Crypto::decrypt($camera['password_enc'] ?? null);
+        $auth = $user !== ''
+            ? Credentials::encode($user) . ':' . Credentials::encode($pass) . '@'
+            : '';
+
+        return sprintf(
+            'rtsp://%s%s:%d%s',
+            $auth,
+            $camera['host'],
+            (int) ($camera['rtsp_port'] ?: 554),
+            $path
+        );
+    }
+
+    /** The RTSP path or absolute URL without credentials. */
+    public static function rtspPath(array $camera): ?string
     {
         if (self::isDemo($camera)) {
             return null;
@@ -145,25 +171,7 @@ final class StreamUrl
             return null;
         }
 
-        // Any absolute stream URL (rtsp/rtmp/http/file) is used verbatim so a
-        // camera can point at an NVR or an HTTP-FLV/HLS source as well.
-        if (preg_match('#^(rtsp|rtsps|rtmp|https?|file)://#i', $path)) {
-            return self::withCredentials(self::fill($path, $camera), $camera);
-        }
-
-        $user = (string) ($camera['username'] ?? '');
-        $pass = Crypto::decrypt($camera['password_enc'] ?? null);
-        $auth = $user !== ''
-            ? rawurlencode($user) . ':' . rawurlencode($pass) . '@'
-            : '';
-
-        return sprintf(
-            'rtsp://%s%s:%d%s',
-            $auth,
-            $camera['host'],
-            (int) ($camera['rtsp_port'] ?: 554),
-            self::fill($path, $camera)
-        );
+        return self::fill($path, $camera);
     }
 
     /**
@@ -186,37 +194,9 @@ final class StreamUrl
             return $url;
         }
 
-        $auth = rawurlencode($user) . ':' . rawurlencode(Crypto::decrypt($camera['password_enc'] ?? null)) . '@';
+        $auth = Credentials::encode($user) . ':' . Credentials::encode(Crypto::decrypt($camera['password_enc'] ?? null)) . '@';
 
         return (string) preg_replace('#://#', '://' . $auth, $url, 1);
-    }
-
-    public static function ptzUrl(array $camera, string $command, float $speed = 0.5, ?int $preset = null): ?string
-    {
-        if (!(int) ($camera['ptz_enabled'] ?? 0)) {
-            return null;
-        }
-
-        $template = trim((string) ($camera['ptz_path'] ?? ''));
-        if ($template === '') {
-            $template = (string) (self::DRIVERS[$camera['driver'] ?? 'generic']['ptz'] ?? '');
-        }
-
-        if ($template === '') {
-            return null;
-        }
-
-        $filled = str_replace(
-            ['{cmd}', '{preset}', '{speed}'],
-            [$command, (string) ($preset ?? 0), (string) round($speed, 2)],
-            self::fill($template, $camera)
-        );
-
-        if (preg_match('#^https?://#i', $filled)) {
-            return $filled;
-        }
-
-        return self::httpBase($camera) . $filled;
     }
 
     /** URL the browser should use for a tile (never contains credentials). */
@@ -233,7 +213,6 @@ final class StreamUrl
             'snapshot_path' => $preset['snapshot'],
             'mjpeg_path'    => $preset['mjpeg'],
             'rtsp_path'     => $preset['rtsp'],
-            'ptz_path'      => $preset['ptz'],
         ];
     }
 

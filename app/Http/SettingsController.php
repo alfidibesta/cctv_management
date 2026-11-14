@@ -6,6 +6,7 @@ namespace Argus\Http;
 
 use Argus\Repositories\Layouts;
 use Argus\Services\Hls;
+use Argus\Services\MediaServer;
 use Argus\Services\Snapshot;
 use Argus\Support\Activity;
 use Argus\Support\Auth;
@@ -23,6 +24,7 @@ final class SettingsController extends Controller
             'settings'    => Settings::all(),
             'timezones'   => timezone_identifiers_list(),
             'diagnostics' => $this->diagnostics(),
+            'media'       => MediaServer::health(),
         ]);
     }
 
@@ -56,6 +58,9 @@ final class SettingsController extends Controller
             'ffmpeg_path'      => mb_substr((string) $this->input('ffmpeg_path', 'ffmpeg'), 0, 255),
             'hls_idle_minutes' => (string) max(1, min(240, $this->int('hls_idle_minutes', 15))),
             'hls_segment_seconds' => (string) max(1, min(6, $this->int('hls_segment_seconds', 2))),
+            'rtsp_transport'   => $this->input('rtsp_transport', 'tcp') === 'udp' ? 'udp' : 'tcp',
+            'rtsp_latency_ms'  => (string) max(50, min(2000, $this->int('rtsp_latency_ms', 300))),
+            'rtsp_frame_drop'  => $this->bool('rtsp_frame_drop') ? '1' : '0',
         ]);
 
         Snapshot::storageDir('cache');

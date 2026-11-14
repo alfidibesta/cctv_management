@@ -35,4 +35,16 @@ return [
         'base_path' => '',
         'installed_at' => null,
     ],
+
+    'media' => [
+        // RTSP gateway used for WebRTC (WHEP) playback and stream provisioning.
+        //   none     - no media server; cameras use MJPEG, snapshot or ffmpeg HLS
+        //   go2rtc   - http://127.0.0.1:1984 by default
+        //   mediamtx - http://127.0.0.1:9997 by default
+        'driver'       => 'none',
+        'go2rtc_url'   => 'http://127.0.0.1:1984',
+        'mediamtx_url' => 'http://127.0.0.1:9997',
+        // Seconds to wait for the media server REST API.
+        'timeout'      => 3,
+    ],
 ];

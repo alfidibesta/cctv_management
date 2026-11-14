@@ -6,7 +6,7 @@ namespace Argus\Http;
 
 use Argus\Repositories\Cameras;
 use Argus\Services\Hls;
-use Argus\Services\Ptz;
+use Argus\Services\MediaServer;
 use Argus\Services\Snapshot;
 use Argus\Support\Activity;
 use Argus\Support\Auth;
@@ -49,26 +49,6 @@ final class ApiController extends Controller
         $this->json(['ok' => true, 'cameras' => $payload]);
     }
 
-    public function ptz(string $id): void
-    {
-        Auth::requireCameraManager();
-        $camera = CameraGate::resolve((int) $id);
-
-        $command = (string) $this->input('command', 'stop');
-        $speed = (float) $this->input('speed', 0.5);
-
-        $result = Ptz::move($camera, $command, max(0.05, min(1.0, $speed)));
-
-        Activity::log(
-            'ptz.' . $command,
-            'PTZ ' . $command . ' on "' . $camera['name'] . '"',
-            'camera',
-            (int) $camera['id']
-        );
-
-        $this->json($result, $result['ok'] ? 200 : 422);
-    }
-
     /** Start the ffmpeg HLS converter for an RTSP camera and return its playlist. */
     public function hls(string $id): void
     {
@@ -87,8 +67,9 @@ final class ApiController extends Controller
             Activity::log('hls.failed', 'HLS failed for "' . $camera['name'] . '": ' . ($result['error'] ?? ''), 'camera', (int) $camera['id']);
 
             $this->json([
-                'error' => $result['error'] ?? 'Unable to start the stream.',
-                'steps' => \Argus\Services\Diagnostics::stepsFor((string) ($result['error'] ?? ''), $camera),
+                'error'   => $result['error'] ?? 'Unable to start the stream.',
+                'fallback' => 'test-pattern',
+                'steps'   => \Argus\Services\Diagnostics::stepsFor((string) ($result['error'] ?? ''), $camera),
             ], 422);
         }
 
@@ -115,9 +96,10 @@ final class ApiController extends Controller
                 Activity::log('hls.failed', 'HLS playlist not ready for "' . $camera['name'] . '"', 'camera', (int) $camera['id']);
 
                 $this->json([
-                    'error'  => 'The camera stream did not start. Check the RTSP path and credentials.',
-                    'detail' => $detail,
-                    'steps'  => \Argus\Services\Diagnostics::stepsFor($detail !== '' ? $detail : 'rtsp timed out', $camera),
+                    'error'    => 'The camera stream did not start. Check the RTSP path and credentials.',
+                    'detail'   => $detail,
+                    'fallback' => 'test-pattern',
+                    'steps'    => \Argus\Services\Diagnostics::stepsFor($detail !== '' ? $detail : 'rtsp timed out', $camera),
                 ], 422);
             }
         }
@@ -128,7 +110,67 @@ final class ApiController extends Controller
             'ok'              => true,
             'playlist'        => url('/stream.php?camera=' . (int) $camera['id'] . '&type=hls&file=index.m3u8'),
             'segment_seconds' => Hls::segmentSeconds(),
+            'latency_ms'      => $result['latency_ms'] ?? Hls::latencyMs($camera),
+            'transport'       => $result['transport'] ?? Hls::transport($camera),
+            'frame_drop'      => $result['frame_drop'] ?? Hls::frameDrop($camera),
         ]);
+    }
+
+    /**
+     * WebRTC (WHEP) signalling relay.
+     *
+     * The browser posts an SDP offer here; PHP forwards it to go2rtc or
+     * MediaMTX and returns the answer. The media server port is never exposed
+     * to the browser, and access is checked against the camera's group rules.
+     */
+    public function webrtc(string $id): void
+    {
+        $camera = CameraGate::resolve((int) $id);
+
+        $payload = json_decode((string) file_get_contents('php://input'), true);
+        $offer = is_array($payload) ? (string) ($payload['sdp'] ?? '') : '';
+
+        if (trim($offer) === '') {
+            $this->json([
+                'error'    => 'An SDP offer is required.',
+                'fallback' => $this->fallbackFor($camera),
+            ], 422);
+        }
+
+        $result = MediaServer::offer((int) $camera['id'], $offer);
+
+        if (!$result['ok']) {
+            $this->json([
+                'error'    => $result['error'] ?? 'The media server did not answer.',
+                'fallback' => $this->fallbackFor($camera),
+            ], 502);
+        }
+
+        Activity::log(
+            'webrtc.session',
+            'WebRTC session opened for "' . $camera['name'] . '" via ' . strtoupper((string) $result['driver']),
+            'camera',
+            (int) $camera['id']
+        );
+
+        $this->json([
+            'ok'         => true,
+            'type'       => 'answer',
+            'sdp'        => $result['sdp'] ?? '',
+            'session'    => $result['session'] ?? null,
+            'driver'     => $result['driver'] ?? MediaServer::driver(),
+            'latency_ms' => Hls::latencyMs($camera),
+        ]);
+    }
+
+    /** Media mode the wall should use when WebRTC is unavailable. */
+    private function fallbackFor(array $camera): string
+    {
+        return match ((string) ($camera['stream_mode'] ?? '')) {
+            'hls'   => 'hls',
+            'mjpeg' => 'mjpeg',
+            default => 'snapshot',
+        };
     }
 
     /** Last lines of the ffmpeg log, for the error response and the app log. */

@@ -65,7 +65,7 @@ final class Auth
         return self::role() === 'admin';
     }
 
-    /** Admins manage everything; operators manage cameras (PTZ, layout). */
+    /** Admins manage everything; operators manage cameras and layouts. */
     public static function canManageCameras(): bool
     {
         return in_array(self::role(), ['admin', 'operator'], true);

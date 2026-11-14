@@ -61,6 +61,9 @@ $flash = flash_messages();
             <a class="nav__item <?= $active === 'health' ? 'is-active' : '' ?>" href="<?= e(url('/health')) ?>">
                 <?= icon('activity') ?><span>Health</span>
             </a>
+            <a class="nav__item <?= $active === 'analytics' ? 'is-active' : '' ?>" href="<?= e(url('/analytics')) ?>">
+                <?= icon('people') ?><span>Analytics</span>
+            </a>
             <?php if ($canManage): ?>
                 <a class="nav__item <?= $active === 'discover' ? 'is-active' : '' ?>" href="<?= e(url('/discover')) ?>">
                     <?= icon('scan') ?><span>Discover</span>

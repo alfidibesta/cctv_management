@@ -42,6 +42,31 @@
         return data;
     };
 
+    /** JSON POST, used for SDP offers and other structured payloads. */
+    Argus.postJson = async (url, payload = {}) => {
+        const response = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json;charset=UTF-8',
+                'X-CSRF-Token': csrf,
+                'X-Requested-With': 'XMLHttpRequest',
+                Accept: 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const data = await response.json().catch(() => ({ error: 'Unexpected server response.' }));
+        if (!response.ok) {
+            const error = new Error(data.error || `Request failed (${response.status})`);
+            error.payload = data;
+            error.status = response.status;
+            throw error;
+        }
+
+        return data;
+    };
+
     Argus.get = async (url) => {
         const response = await fetch(url, {
             credentials: 'same-origin',
@@ -487,6 +512,93 @@
             window.setTimeout(poll, 4000);
             window.setInterval(poll, 45000);
         }
+    }
+
+    /* --------------------------------------------- latency / jitter buffer */
+    document.querySelectorAll('[data-latency-control]').forEach((control) => {
+        const slider = control.querySelector('[data-latency-slider]');
+        const output = control.querySelector('[data-latency-value]');
+        const presets = Array.from(control.querySelectorAll('[data-latency-preset]'));
+
+        const sync = () => {
+            if (!slider) return;
+            if (output) output.textContent = `${slider.value} ms`;
+            presets.forEach((button) => {
+                button.classList.toggle('is-active', Number(button.dataset.latencyPreset) === Number(slider.value));
+            });
+        };
+
+        slider?.addEventListener('input', sync);
+        presets.forEach((button) => {
+            button.addEventListener('click', () => {
+                if (!slider) return;
+                slider.value = button.dataset.latencyPreset;
+                sync();
+            });
+        });
+
+        sync();
+    });
+
+    /* ------------------------------------------------ credential inspector */
+    const credentialPanel = document.querySelector('[data-credential-panel]');
+    if (credentialPanel) {
+        const url = credentialPanel.dataset.credentialUrl;
+        const body = credentialPanel.querySelector('[data-credential-body]');
+        const plainInput = credentialPanel.querySelector('[data-credential-plain]');
+        const encoded = credentialPanel.querySelector('[data-credential-encoded]');
+        const uriInput = credentialPanel.querySelector('[data-credential-uri]');
+        const status = credentialPanel.querySelector('[data-credential-status]');
+        const issues = credentialPanel.querySelector('[data-credential-issues]');
+        const eye = credentialPanel.querySelector('[data-credential-eye]');
+        const check = credentialPanel.querySelector('[data-credential-check]');
+
+        eye?.addEventListener('click', () => {
+            if (!plainInput) return;
+            const reveal = plainInput.type === 'password';
+            plainInput.type = reveal ? 'text' : 'password';
+            eye.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+            eye.title = reveal ? 'Mask password' : 'Reveal password';
+        });
+
+        check?.addEventListener('click', async () => {
+            if (!url) return;
+            const original = check.innerHTML;
+            check.disabled = true;
+            check.innerHTML = '<span class="diag">Checking…</span>';
+
+            try {
+                const report = await Argus.post(url, {});
+
+                body.hidden = false;
+                plainInput.value = report.plaintext || '';
+                plainInput.type = 'password';
+                if (encoded) encoded.textContent = report.encoded_password || '(none)';
+                uriInput.value = report.uri || '(no RTSP path configured)';
+
+                status.textContent = report.status;
+                status.classList.toggle('status-pill--ok', report.status === 'AUTH_VERIFIED');
+                status.classList.toggle('status-pill--bad', report.status === 'AUTH_ENCODING_ERROR');
+
+                if (issues) {
+                    issues.textContent = report.issues && report.issues.length
+                        ? report.issues.join(' ')
+                        : report.status === 'AUTH_VERIFIED'
+                            ? `Round-trip OK${report.special_characters && report.special_characters.length ? ' — special characters: ' + report.special_characters.join(' ') : ''}`
+                            : 'No credentials stored.';
+                }
+
+                toast(
+                    report.status === 'AUTH_VERIFIED' ? 'Credentials verified: RTSP URI encoding is correct.' : `Credential check: ${report.status}`,
+                    report.status === 'AUTH_VERIFIED' ? 'success' : 'error'
+                );
+            } catch (error) {
+                toast(error.message || 'Could not inspect the credentials.', 'error');
+            } finally {
+                check.disabled = false;
+                check.innerHTML = original;
+            }
+        });
     }
 
     /* ------------------------------------------------- dismiss check panel */

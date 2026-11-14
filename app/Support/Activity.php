@@ -17,7 +17,7 @@ final class Activity
                 'action'       => mb_substr($action, 0, 64),
                 'subject_type' => $subjectType !== null ? mb_substr($subjectType, 0, 32) : null,
                 'subject_id'   => $subjectId,
-                'description'  => mb_substr($description, 0, 255),
+                'description'  => mb_substr(\Argus\Services\Credentials::redact($description), 0, 255),
                 'ip'           => Auth::clientIp(),
                 'created_at'   => gmdate('Y-m-d H:i:s'),
             ]);

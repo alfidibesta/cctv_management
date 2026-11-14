@@ -280,10 +280,13 @@ if (!function_exists('csv_response')) {
         }
 
         fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, $header);
+
+        // PHP 8.4+ deprecates relying on the default $escape value; pin it to
+        // the documented future default so exports stay warning-free on 8.5.
+        fputcsv($out, $header, ',', '"', '');
 
         foreach ($rows as $row) {
-            fputcsv($out, $row);
+            fputcsv($out, $row, ',', '"', '');
         }
 
         fclose($out);

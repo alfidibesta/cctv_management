@@ -2,6 +2,7 @@
 /** @var array $settings */
 /** @var array $timezones */
 /** @var array $diagnostics */
+/** @var array $media */
 require_once BASE_PATH . '/app/views/partials/icons.php';
 
 $check = static function (bool $ok): string {
@@ -65,9 +66,10 @@ $check = static function (bool $ok): string {
                     <select class="select" name="default_layout">
                         <option value="1" <?= selected($settings['default_layout'], 1) ?>>1 camera</option>
                         <option value="4" <?= selected($settings['default_layout'], 4) ?>>4 cameras</option>
-                        <option value="9" <?= selected($settings['default_layout'], 9) ?>>9 cameras</option>
+                        <option value="9" <?= selected($settings['default_layout'], 9) ?>>9 cameras (3×3)</option>
+                        <option value="16" <?= selected($settings['default_layout'], 16) ?>>16 cameras (4×4)</option>
                     </select>
-                    <span class="field__hint">Applies to new users. Maximum is 9 per page.</span>
+                    <span class="field__hint">Applies to new users. Maximum is 16 per page.</span>
                 </label>
 
                 <label class="field">
@@ -88,6 +90,51 @@ $check = static function (bool $ok): string {
                     <input class="input" type="number" name="snapshot_cache" min="0" max="60"
                            value="<?= (int) $settings['snapshot_cache'] ?>">
                     <span class="field__hint">Higher values reduce load on cameras at the cost of latency.</span>
+                </label>
+            </div>
+        </section>
+
+        <section class="card" data-collapse="settings-rtsp">
+            <header class="card__head">
+                <div class="card__head__text">
+                    <h3>RTSP latency &amp; buffer</h3>
+                    <p>Global defaults for every camera; each camera can override them in its own form.</p>
+                </div>
+                <button class="collapse-toggle" type="button" data-collapse-toggle>
+                    <span class="collapse-label">Hide</span>
+                </button>
+            </header>
+            <div class="card__body grid-2" data-latency-control>
+                <label class="field">
+                    <span class="field__label">Transport protocol</span>
+                    <select class="select" name="rtsp_transport">
+                        <option value="udp" <?= selected($settings['rtsp_transport'], 'udp') ?>>UDP — ultra-low latency</option>
+                        <option value="tcp" <?= selected($settings['rtsp_transport'], 'tcp') ?>>TCP — interleaved, packet-loss resistant</option>
+                    </select>
+                    <span class="field__hint">Applied to new cameras and to ffmpeg / the media server.</span>
+                </label>
+
+                <label class="field">
+                    <span class="field__label">Default jitter buffer / latency target</span>
+                    <span class="latency-row">
+                        <input class="slider" type="range" name="rtsp_latency_ms" min="50" max="2000" step="50"
+                               value="<?= (int) $settings['rtsp_latency_ms'] ?>" data-latency-slider>
+                        <output class="latency-value" data-latency-value><?= (int) $settings['rtsp_latency_ms'] ?> ms</output>
+                    </span>
+                    <span class="latency-presets" role="group" aria-label="Latency presets">
+                        <button type="button" class="chip" data-latency-preset="100">Ultra-Low 100 ms</button>
+                        <button type="button" class="chip" data-latency-preset="300">Balanced 300 ms</button>
+                        <button type="button" class="chip" data-latency-preset="1000">Stable 1000 ms</button>
+                    </span>
+                </label>
+
+                <label class="switch switch--wide">
+                    <input type="checkbox" name="rtsp_frame_drop" value="1" <?= checked($settings['rtsp_frame_drop'] === '1') ?>>
+                    <span class="switch__track"></span>
+                    <span class="switch__label">
+                        <strong>Drop delayed frames by default</strong>
+                        <small>Keeps live playback real-time instead of accumulating drift when the camera link stalls.</small>
+                    </span>
                 </label>
             </div>
         </section>
@@ -162,6 +209,11 @@ $check = static function (bool $ok): string {
                     <li><span>cURL</span><?= $check($diagnostics['curl']) ?></li>
                     <li><span>OpenSSL</span><?= $check($diagnostics['openssl']) ?></li>
                     <li><span>ffmpeg (HLS)</span><?= $check($diagnostics['ffmpeg']) ?></li>
+                    <li><span>Media server</span><span class="diag"><?= e($media['label'] ?? 'Disabled') ?></span></li>
+                    <?php if (($media['driver'] ?? 'none') !== 'none'): ?>
+                        <li class="diag-path"><span></span><span class="diag"><?= e($media['url'] ?? '') ?></span></li>
+                        <li><span>WebRTC gateway</span><?= $check((bool) ($media['ok'] ?? false)) ?></li>
+                    <?php endif; ?>
                     <?php if (!empty($diagnostics['ffmpeg_binary'])): ?>
                         <li class="diag-path"><span></span><span class="diag"><?= e(str_replace(BASE_PATH, '', (string) $diagnostics['ffmpeg_binary'])) ?></span></li>
                     <?php endif; ?>

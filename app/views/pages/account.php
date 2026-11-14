@@ -60,7 +60,7 @@ require_once BASE_PATH . '/app/views/partials/icons.php';
             <h4 class="card__mini-title"><?= icon('shield') ?> Access</h4>
             <ul class="list-tips">
                 <li><strong>Viewer</strong> — sees cameras in the groups assigned to them.</li>
-                <li><strong>Operator</strong> — all cameras, PTZ and wall layouts.</li>
+                <li><strong>Operator</strong> — all cameras, digital zoom/pan and wall layouts.</li>
                 <li><strong>Administrator</strong> — full control including users and settings.</li>
             </ul>
             <p class="field__hint">Role changes are made by an administrator.</p>

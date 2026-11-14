@@ -54,7 +54,8 @@ final class Logger
         $line = json_encode([
             'time'    => gmdate('c'),
             'level'   => $level,
-            'message' => mb_substr($message, 0, 2000),
+            // Credentials inside URIs are masked before they reach the log.
+            'message' => \Argus\Services\Credentials::redact(mb_substr($message, 0, 2000)),
             'context' => self::cleanContext($context),
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
 
@@ -177,7 +178,7 @@ final class Logger
         $clean = [];
         foreach ($context as $key => $value) {
             if (is_string($value)) {
-                $clean[$key] = mb_substr($value, 0, 600);
+                $clean[$key] = \Argus\Services\Credentials::redact(mb_substr($value, 0, 600));
             } elseif (is_scalar($value) || $value === null) {
                 $clean[$key] = $value;
             } elseif (is_array($value)) {

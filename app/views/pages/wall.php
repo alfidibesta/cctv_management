@@ -26,10 +26,10 @@ $wallData = [
         <div class="wall-bar__group">
             <span class="wall-bar__label">Grid</span>
             <div class="segmented" role="group" aria-label="Grid size">
-                <?php foreach ([1 => 'single', 4 => 'grid4', 9 => 'grid9'] as $value => $ico): ?>
+                <?php foreach ([1 => 'single', 4 => 'grid4', 9 => 'grid9', 16 => 'grid16'] as $value => $ico): ?>
                     <button type="button" class="segmented__btn <?= $slots === $value ? 'is-active' : '' ?>"
                             data-grid="<?= $value ?>" title="<?= $value ?> at a time">
-                        <?= icon($ico) ?><span><?= $value ?></span>
+                        <?= icon($ico) ?><span><?= $value === 1 ? '1×1' : ($value === 4 ? '2×2' : ($value === 9 ? '3×3' : '4×4')) ?></span>
                     </button>
                 <?php endforeach; ?>
             </div>
@@ -56,6 +56,11 @@ $wallData = [
         </div>
 
         <div class="wall-bar__spacer"></div>
+
+        <button type="button" class="btn btn--ghost btn--sm" data-night-vision aria-pressed="false"
+                title="Client-side IR night vision">
+            <?= icon('moon') ?> <span>Night vision</span>
+        </button>
 
         <div class="wall-stat" title="Cameras online">
             <span class="dot dot--online"></span>
@@ -135,7 +140,7 @@ $wallData = [
 </aside>
 <div class="scrim" data-scrim hidden></div>
 
-<!-- Expanded camera view with PTZ -->
+<!-- Expanded camera view: digital zoom, pan, PiP and latency HUD -->
 <div class="modal" data-camera-modal hidden>
     <div class="modal__panel modal__panel--wide" role="dialog" aria-modal="true" aria-labelledby="camera-modal-title">
         <header class="modal__head">

@@ -14,7 +14,8 @@ browser tab: dark, quiet, and readable from a distance.
 - **Many cameras, many sites.** Cameras are organised in groups; add them one by
   one or paste a whole site at once with bulk import. There is no hard limit on
   the number of cameras.
-- **Three ways to get video into the browser:**
+- **Four ways to get video into the browser:**
+  - `WebRTC` (WHEP) — go2rtc or MediaMTX, sub-second and hardware decoded.
   - `MJPEG` — proxied multipart stream, lowest latency, lowest server CPU.
   - `Snapshot` — JPEG refresh loop, works with almost every camera.
   - `HLS` — RTSP converted by ffmpeg for cameras that only speak RTSP, with
@@ -24,8 +25,30 @@ browser tab: dark, quiet, and readable from a distance.
   `stream.php` after an access check.
 - **Camera status at a glance.** Online/offline dots, latency, and a friendly
   "no signal" frame instead of a broken image. Parallel health probes.
-- **PTZ pad** with configurable HTTP command templates (ACTi CGI, Axis VAPIX,
-  most CGI-based cameras), speed control and press-to-move / release-to-stop.
+- **Digital zoom & pan, browser-side.** Smooth 1.0x–8.0x canvas zoom centred on
+  the cursor, drag panning, a zoom slider, a *Reset 1.0x* button and a corner
+  picture-in-picture mini-map of the zoomed region. No camera motor is moved
+  and no hardware PTZ is required.
+- **Locked 30 FPS compositor.** Every tile is drawn by `requestAnimationFrame`
+  with a 33.33 ms delta accumulator, a hardware-accelerated canvas and batched
+  HUD writes, so a 4×4 wall keeps a steady 30 FPS with live frame-time, jitter
+  and buffer-health telemetry.
+- **IR night vision, snapshots and drag-and-drop.** A client-side night-vision
+  canvas filter, PNG snapshots of exactly what you see (zoom included) and
+  drag-and-drop channel assignment on the TV wall.
+- **Person detection & people counting.** Inference runs in a Web Worker at
+  5–10 FPS while the 30 FPS canvas draws `PERSON 94%` boxes, centroid dots and
+  `#ID-04` tracking ids. Operators draw a virtual tripwire (IN/OUT/NET) or an
+  occupancy zone with an alarm threshold; counts batch-sync to PHP every 5 s and
+  appear on the tile HUD and the Analytics page, with hourly CSV export.
+- **RTSP latency controls.** Global and per-camera transport (UDP/TCP), a
+  50–2000 ms jitter-buffer slider with Ultra-Low 100 / Balanced 300 / Stable
+  1000 presets, and an optional frame-drop policy that keeps playback live.
+- **Credential inspector.** Decrypts the stored password on request, shows the
+  plaintext next to the sanitized RTSP URI (`aaa19!` → `aaa19%21`), and logs
+  `AUTH_VERIFIED` or `AUTH_ENCODING_ERROR` with the secret masked.
+- **WebRTC via go2rtc or MediaMTX.** A PHP signalling proxy keeps the media
+  server on loopback and falls back to HLS/MSE, MJPEG or a canvas test pattern.
 - **Roles and per-group access** — admin, operator, viewer.
 - **Audit trail + error log.** Every action is recorded, and PHP errors or
   warnings go to `storage/logs/app.log` and to the *Activity → Errors* tab.
@@ -48,6 +71,7 @@ browser tab: dark, quiet, and readable from a distance.
 | PHP 8.1 – 8.5 | `pdo_mysql`, `curl`, `openssl`, `mbstring`. PHP 8.5 is supported: the deprecated `PDO::MYSQL_ATTR_*` constant and the no-op `curl_close()` calls are gone |
 | MySQL 5.7+ / MariaDB 10.4+ | utf8mb4 |
 | ffmpeg | optional, only for cameras in **HLS** mode. Can be dropped into `bin/` — see below |
+| go2rtc or MediaMTX | optional, for WebRTC (WHEP) playback and stream provisioning |
 | Web server | Apache with `mod_rewrite`, nginx, or PHP's built-in server |
 
 ## Install
@@ -250,28 +274,118 @@ starts one segment behind the live edge and may play at up to 2× speed to catch
 up, so a 1 s segment setting lands roughly 1.5–2.5 s behind live; 2 s segments
 land around 3–4 s.
 
-### PTZ
+### Digital zoom, pan and night vision
 
-PTZ uses a simple GET command URL. `{cmd}` is replaced with `up`, `down`, `left`,
-`right`, `zoom_in`, `zoom_out`, `home` or `stop`; `{speed}` with 0.05–1.0.
+Zoom and pan happen in the browser, on a canvas that composites the camera
+frame. Nothing is sent to the camera, so they work with every camera and every
+stream mode, and two operators can look at different regions of the same feed.
 
-Example ACTi-style template:
+| Control | Action |
+| --- | --- |
+| Mouse wheel | Zoom 1.0x–8.0x at the cursor position |
+| Drag (when zoomed) | Pan the visible region |
+| Slider / + / − | Zoom without a mouse wheel |
+| `Reset 1.0x` or double-click | Back to the full frame |
+| PiP mini-map | Shows the visible region inside the full frame |
+| Night vision | Grayscale + green screen blend, per tile or whole wall |
+
+The tile HUD reports live latency, jitter, buffer health, measured FPS and
+frame time. Snapshots are captured from the canvas, so they include the current
+zoom and night-vision filter.
+
+### RTSP latency and buffer
+
+The transport, jitter buffer and frame-drop policy can be set globally in
+*Settings → RTSP latency & buffer* and overridden per camera:
+
+- **Transport** — `UDP` for the lowest latency on a clean LAN, `TCP` when packets
+  are lost (Wi-Fi, congested switches).
+- **Jitter buffer / latency target** — 50–2000 ms. Presets: *Ultra-Low 100 ms*,
+  *Balanced 300 ms*, *Stable 1000 ms*. ffmpeg receives the value as
+  `-max_delay`, and the analysis/probe window scales with it.
+- **Frame drop** — discards corrupt packets and late frames instead of queueing
+  them, so a stalled camera resumes at the live edge rather than replaying old
+  video.
+
+The wall adds the render cost to the target and shows the result as `ms` in
+HLS/WebRTC, with jitter and buffer health next to it.
+
+### Person detection and people counting
+
+Detection is edge-side and non-blocking: a Web Worker receives frames at 5–10
+FPS, tracks people, and posts normalised boxes back. The overlay canvas redraws
+at the locked 30 FPS, so inference never stalls video.
+
+- **Backend** — drop `tf.min.js` and `coco-ssd.min.js` into
+  `public/assets/vendor/` to run COCO-SSD person inference locally. Without
+  those files (and for demo cameras) the worker runs deterministic simulated
+  pedestrians, so counting, tripwires and telemetry work out of the box with no
+  multi-megabyte model in the repository.
+- **Per-camera controls** — detection on/off, confidence 30–95 %, bounding-box
+  HUD, and a tracking id per person.
+- **Tripwire** — click two points on the video; IN/OUT arrows are drawn at the
+  line, `Flip IN/OUT` swaps the direction, and `IN` / `OUT` / `NET` update live.
+- **Zone occupancy** — drag a box; `INSIDE` counts people in it and an alarm is
+  raised when the configurable limit is exceeded.
+- **Telemetry** — the browser batches events to `/api/analytics.php` every 5
+  seconds (occupancy is also sampled every 30 s), and PHP stores them in
+  `person_events`. The *Analytics* page shows IN/OUT/INSIDE/NET, an hourly bar
+  chart, daily totals, recent samples and an hourly CSV export.
+- **Access** — any signed-in user with camera access may stream counting
+  samples; only administrators and operators can persist detection settings.
+
+### Credentials and RTSP encoding
+
+Camera passwords are stored with AES-256-GCM and only decrypted on the server.
+When an RTSP URL is built, both the username and password are percent-encoded
+with RFC 3986 rules (PHP `rawurlencode`, the same set as JavaScript
+`encodeURIComponent`):
 
 ```
-/cgi-bin/ptz?move={cmd}&speed={speed}
+aaa19!          →  rtsp://operator:aaa19%21@10.0.0.21:554/onvif1
 ```
 
-Check your camera's HTTP API documentation — many firmware builds use a
-different path or require the ONVIF-SOAP `ContinuousMove` operation instead. In
-that case leave PTZ off; the wall works without it.
+*Cameras → Edit → Credential check → Reveal & verify* decrypts the stored
+password, shows the plaintext next to the sanitized URI and reports
+`AUTH_VERIFIED` or `AUTH_ENCODING_ERROR`. The activity log records the verdict
+with the password masked; URIs are redacted before they reach the log.
+
+### WebRTC, go2rtc and MediaMTX
+
+Set the driver in `config/config.php` (the installer writes it, and `none` keeps
+MJPEG/HLS working without a media server):
+
+```php
+'media' => [
+    'driver'       => 'go2rtc',   // none | go2rtc | mediamtx
+    'go2rtc_url'   => 'http://127.0.0.1:1984',
+    'mediamtx_url' => 'http://127.0.0.1:9997',
+    'timeout'      => 3,
+],
+```
+
+Adding, editing or deleting a camera registers its RTSP source automatically:
+
+- **go2rtc** — `PUT /api/streams?name={cam_id}&src={encoded_rtsp_url}` and
+  `DELETE /api/streams?name={cam_id}`.
+- **MediaMTX** — `POST /v3/config/paths/add/{cam_id}` (falling back to
+  `PATCH /v3/config/paths/patch/{cam_id}`) with `source`, `rtspTransport` and
+  `sourceOnDemand`, and `POST /v3/config/paths/delete/{cam_id}`.
+
+Playback goes through `/api/webrtc_proxy.php`, which requires a signed-in
+session and camera access, relays the SDP offer to go2rtc's `/api/webrtc?src=`
+or MediaMTX's `/{cam_id}/whep`, and returns the answer. The media server port is
+never exposed to the browser. If signalling or playback fails, the tile falls
+back to HLS/MSE, then MJPEG, and finally an animated canvas test pattern instead
+of a frozen black rectangle.
 
 ## Roles
 
-| Role | Wall | PTZ | Cameras / groups | Users, settings, audit |
+| Role | Wall | Digital zoom | Cameras / groups | Users, settings, audit |
 | --- | --- | --- | --- | --- |
 | Administrator | all | yes | manage | yes |
 | Operator | all | yes | manage | no |
-| Viewer | assigned groups | no | read only | no |
+| Viewer | assigned groups | yes | read only | no |
 
 Group access is enforced on pages, on JSON endpoints and on every media request
 in `stream.php`.
@@ -329,9 +443,10 @@ errors are also mirrored into the activity table.
 
 ```
 app/                 PHP application (controllers, repositories, services, views)
+  Repositories/      includes Analytics: counting config and foot-traffic samples
   Http/              request handlers + router wiring
   Repositories/      SQL for cameras, groups, users, layouts, activity
-  Services/          stream URL builders, snapshot/MJPEG fetch, PTZ, HLS
+  Services/          stream URLs, credentials, snapshot/MJPEG fetch, HLS, go2rtc/MediaMTX
   Support/           config, database, auth, CSRF, crypto, settings, router
 install/schema.sql   MySQL schema (also applied by the installer)
 public/              web root: front controller, media gateway, assets
@@ -359,7 +474,7 @@ config/              config.php written by the installer
 Exercised against MariaDB 11.4 with PHP 8.4.23 and PHP 8.5.8: installer, sign-in,
 throttled failures, camera CRUD and validation, encrypted credential storage,
 snapshot proxy, MJPEG proxy (multipart passthrough), ffmpeg HLS playlist +
-segment serving, PTZ error handling, viewer group isolation, CSRF rejection,
+segment serving, viewer group isolation, CSRF rejection,
 layout persistence, the health history and CSV exports, ONVIF profile parsing,
 the `create-admin` CLI and 404/403 handling.
 

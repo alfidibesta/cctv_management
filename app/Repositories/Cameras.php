@@ -20,7 +20,7 @@ final class Cameras
 
     public const COLUMNS = 'c.id, c.group_id, c.name, c.location, c.driver, c.host, c.port, c.rtsp_port,
         c.username, c.password_enc, c.channel, c.stream_mode, c.snapshot_path, c.mjpeg_path, c.rtsp_path,
-        c.ptz_path, c.ptz_enabled, c.transport, c.is_enabled, c.sort_order, c.status, c.last_seen_at,
+        c.transport, c.latency_ms, c.frame_drop, c.analytics_json, c.is_enabled, c.sort_order, c.status, c.last_seen_at,
         c.last_latency_ms, c.last_error, c.created_at, c.updated_at';
 
     public static function all(?int $groupId = null, string $search = ''): array

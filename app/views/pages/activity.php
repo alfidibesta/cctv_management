@@ -18,7 +18,7 @@ $entries = $entries ?? [];
         <p class="page-head__sub">
             <?= $tab === 'errors'
                 ? 'Runtime errors and warnings from the app and PHP — newest first.'
-                : 'Sign-ins, camera changes, checks and PTZ commands — the last 200 events.' ?>
+                : 'Sign-ins, camera changes, checks and credential verifications — the last 200 events.' ?>
         </p>
     </div>
     <div class="page-head__actions">

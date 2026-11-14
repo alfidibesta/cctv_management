@@ -15,7 +15,6 @@ foreach ($drivers as $key => $driver) {
         'snapshot' => $driver['snapshot'],
         'mjpeg'    => $driver['mjpeg'],
         'rtsp'     => $driver['rtsp'],
-        'ptz'      => $driver['ptz'],
         'hint'     => $driver['hint'],
     ];
 }
@@ -131,6 +130,55 @@ foreach ($drivers as $key => $driver) {
                     <?php endif; ?>
                 </label>
 
+                <?php if (!$isNew && $hasPassword): ?>
+                    <div class="field field--wide credential" data-credential-panel
+                         data-credential-url="<?= e(url('/cameras/' . (int) $camera['id'] . '/credentials')) ?>">
+                        <div class="credential__head">
+                            <div>
+                                <span class="field__label">Credential check</span>
+                                <span class="field__hint">
+                                    Decrypts the stored password and shows the exact percent-encoded RTSP URI the server uses.
+                                </span>
+                            </div>
+                            <button type="button" class="btn btn--subtle btn--sm" data-credential-check>
+                                <?= icon('shield') ?> Reveal &amp; verify
+                            </button>
+                        </div>
+                        <div class="credential__body" data-credential-body hidden>
+                            <div class="grid-2">
+                                <label class="field">
+                                    <span class="field__label">Plaintext password</span>
+                                    <span class="input-wrap">
+                                        <input class="input input--mono" type="password" readonly
+                                               value="" autocomplete="off" spellcheck="false" data-credential-plain>
+                                        <button type="button" class="icon-btn icon-btn--sm" data-credential-eye
+                                                aria-label="Reveal password" title="Reveal password"><?= icon('eye') ?></button>
+                                    </span>
+                                    <span class="field__hint">Percent-encoded: <code data-credential-encoded>—</code></span>
+                                </label>
+                                <label class="field">
+                                    <span class="field__label">Sanitized RTSP URI</span>
+                                    <input class="input input--mono" type="text" readonly value="" data-credential-uri>
+                                    <span class="field__hint">Special characters are encoded as %21, %40, %23… — never stripped.</span>
+                                </label>
+                            </div>
+                            <div class="credential__meta">
+                                <span class="status-pill" data-credential-status>Not checked</span>
+                                <span class="field__hint" data-credential-issues></span>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <label class="field">
+                    <span class="field__label">RTSP transport</span>
+                    <select class="select" name="transport">
+                        <option value="udp" <?= selected($camera['transport'], 'udp') ?>>UDP — ultra-low latency</option>
+                        <option value="tcp" <?= selected($camera['transport'], 'tcp') ?>>TCP — interleaved, packet-loss resistant</option>
+                    </select>
+                    <span class="field__hint">UDP is fastest on a clean LAN; TCP survives Wi-Fi and busy switches.</span>
+                </label>
+
                 <label class="field">
                     <span class="field__label">Channel</span>
                     <input class="input" type="number" name="channel" min="1" max="64" value="<?= (int) $camera['channel'] ?>">
@@ -153,13 +201,6 @@ foreach ($drivers as $key => $driver) {
                     <span class="field__hint">MJPEG needs the least server CPU. HLS works for RTSP-only cameras.</span>
                 </label>
 
-                <label class="field">
-                    <span class="field__label">RTSP transport</span>
-                    <select class="select" name="transport">
-                        <option value="tcp" <?= selected($camera['transport'], 'tcp') ?>>TCP (recommended)</option>
-                        <option value="udp" <?= selected($camera['transport'], 'udp') ?>>UDP</option>
-                    </select>
-                </label>
             </div>
         </section>
 
@@ -197,32 +238,39 @@ foreach ($drivers as $key => $driver) {
             </div>
         </section>
 
-        <section class="card" data-collapse="camera-ptz">
+        <section class="card" data-collapse="camera-latency">
             <header class="card__head">
                 <div class="card__head__text">
-                    <h3>Pan / tilt / zoom</h3>
-                    <p>Optional HTTP command template. {cmd} is replaced with up, down, left, right, zoom_in, zoom_out, home or stop.</p>
+                    <h3>RTSP stream latency</h3>
+                    <p>Jitter buffer, transport and frame-drop policy for this camera. Zoom and pan on the wall are digital and browser-side — the camera is never moved.</p>
                 </div>
                 <button class="collapse-toggle" type="button" data-collapse-toggle>
                     <span class="collapse-label">Hide</span>
                 </button>
             </header>
-            <div class="card__body stack">
-                <label class="switch">
-                    <input type="checkbox" name="ptz_enabled" value="1" <?= checked((int) $camera['ptz_enabled'] === 1) ?>>
-                    <span class="switch__track"></span>
-                    <span class="switch__label">
-                        <strong>Enable PTZ controls</strong>
-                        <small>Shows the direction pad on the expanded camera view.</small>
+            <div class="card__body stack" data-latency-control>
+                <label class="field">
+                    <span class="field__label">Latency target / jitter buffer</span>
+                    <span class="latency-row">
+                        <input class="slider" type="range" name="latency_ms" min="50" max="2000" step="50"
+                               value="<?= (int) $camera['latency_ms'] ?>" data-latency-slider>
+                        <output class="latency-value" data-latency-value><?= (int) $camera['latency_ms'] ?> ms</output>
                     </span>
+                    <span class="latency-presets" role="group" aria-label="Latency presets">
+                        <button type="button" class="chip" data-latency-preset="100">Ultra-low 100 ms</button>
+                        <button type="button" class="chip" data-latency-preset="300">Balanced 300 ms</button>
+                        <button type="button" class="chip" data-latency-preset="1000">Stable 1000 ms</button>
+                    </span>
+                    <span class="field__hint">Lower values feel live; higher values smooth out a lossy camera link.</span>
                 </label>
 
-                <label class="field">
-                    <span class="field__label">PTZ command URL</span>
-                    <input class="input input--mono" type="text" name="ptz_path" maxlength="255"
-                           data-path="ptz" value="<?= e($camera['ptz_path']) ?>"
-                           placeholder="/cgi-bin/ptz?move={cmd}&speed=0.5">
-                    <span class="field__hint">Check your camera's HTTP API documentation — the path differs per firmware.</span>
+                <label class="switch">
+                    <input type="checkbox" name="frame_drop" value="1" <?= checked((int) $camera['frame_drop'] === 1) ?>>
+                    <span class="switch__track"></span>
+                    <span class="switch__label">
+                        <strong>Drop delayed frames</strong>
+                        <small>Skips late frames and corrupt packets so playback stays real-time instead of drifting behind.</small>
+                    </span>
                 </label>
             </div>
         </section>

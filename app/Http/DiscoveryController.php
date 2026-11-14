@@ -169,9 +169,9 @@ final class DiscoveryController extends Controller
             'snapshot_path' => $snapshot,
             'mjpeg_path'    => '',
             'rtsp_path'     => $rtsp,
-            'ptz_path'      => '',
-            'ptz_enabled'   => 0,
-            'transport'     => 'tcp',
+            'transport'     => \Argus\Services\Hls::transport([]),
+            'latency_ms'    => \Argus\Services\Hls::latencyMs([]),
+            'frame_drop'    => \Argus\Services\Hls::frameDrop([]) ? 1 : 0,
             'is_enabled'    => 1,
             'sort_order'    => Cameras::nextSortOrder(),
             'status'        => 'unknown',
@@ -179,6 +179,11 @@ final class DiscoveryController extends Controller
 
         $id = Cameras::create($data);
         Snapshot::clearCache($id);
+
+        // Register the new RTSP source on the configured media server.
+        if (\Argus\Services\MediaServer::enabled()) {
+            \Argus\Services\MediaServer::provision(Cameras::find($id) ?? ($data + ['id' => $id]));
+        }
 
         Activity::log('camera.created', 'Added ONVIF camera "' . $data['name'] . '"', 'camera', $id);
         Logger::info('camera.onvif_added', ['camera' => $id, 'host' => $host, 'mode' => $mode]);

@@ -112,6 +112,14 @@ final class SetupController extends Controller
                     'base_path'    => '',
                     'installed_at' => gmdate('c'),
                 ],
+                // Media gateway. Switch driver to "go2rtc" or "mediamtx"
+                // after installing one of them next to the app.
+                'media' => [
+                    'driver'       => 'none',
+                    'go2rtc_url'   => 'http://127.0.0.1:1984',
+                    'mediamtx_url' => 'http://127.0.0.1:9997',
+                    'timeout'      => 3,
+                ],
             ]);
         } catch (\Throwable $e) {
             back_with_errors('/setup', ['db_host' => $e->getMessage()]);
@@ -268,9 +276,9 @@ final class SetupController extends Controller
                 'snapshot_path' => '',
                 'mjpeg_path'    => '',
                 'rtsp_path'     => '',
-                'ptz_path'      => '',
-                'ptz_enabled'   => 0,
                 'transport'     => 'tcp',
+                'latency_ms'    => 300,
+                'frame_drop'    => 1,
                 'is_enabled'    => 1,
                 'sort_order'    => $order,
                 'status'        => 'online',

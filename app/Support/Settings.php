@@ -22,6 +22,9 @@ final class Settings
         'hls_idle_minutes'  => '15',
         'hls_segment_seconds' => '2',
         'status_interval'   => '20',
+        'rtsp_transport'    => 'tcp',
+        'rtsp_latency_ms'   => '300',
+        'rtsp_frame_drop'   => '1',
         'wall_title'        => 'Live wall',
     ];
 

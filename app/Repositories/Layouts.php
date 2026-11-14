@@ -7,12 +7,12 @@ namespace Argus\Repositories;
 use Argus\Support\Db;
 
 /**
- * One live-wall layout per user, capped at 9 tiles per page.
+ * One live-wall layout per user, capped at 16 tiles per page.
  */
 final class Layouts
 {
-    public const MAX_TILES = 9;
-    public const COLUMNS = [1, 4, 9];
+    public const MAX_TILES = 16;
+    public const COLUMNS = [1, 4, 9, 16];
 
     public static function forUser(int $userId): ?array
     {

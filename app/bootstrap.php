@@ -150,6 +150,10 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 // Timezone and display settings come from the database once installed.
 if (Argus\Support\Config::installed()) {
+    // Column/setting upgrades run once per schema version; older databases
+    // gain the streaming columns without touching existing camera records.
+    Argus\Support\Migrate::run();
+
     try {
         $tz = Argus\Support\Settings::get('timezone');
         if ($tz && in_array($tz, timezone_identifiers_list(), true)) {

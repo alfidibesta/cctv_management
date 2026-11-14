@@ -81,6 +81,7 @@
         if (instances.has(key)) return instances.get(key);
 
         const host = viewport.host;
+        const variant = options.variant === 'modal' ? 'modal' : 'tile';
         const state = {
             camera,
             key,
@@ -114,20 +115,40 @@
         overlay.className = 'dt-overlay';
         host.appendChild(overlay);
 
+        const bar = document.createElement('div');
+        bar.className = 'dt-bar';
+        bar.classList.toggle('is-live', state.config.enabled);
+
         const counts = document.createElement('div');
         counts.className = 'dt-counts';
         counts.innerHTML = '<span class="dt-counts__item">IN <b data-dt-in>0</b></span>'
             + '<span class="dt-counts__item">OUT <b data-dt-out>0</b></span>'
             + '<span class="dt-counts__item">INSIDE <b data-dt-inside>0</b></span>';
-        host.appendChild(counts);
+        bar.appendChild(counts);
 
         const cluster = document.createElement('div');
         cluster.className = 'dt-cluster';
         cluster.innerHTML = `<button type="button" class="dt-btn" data-dt-open title="Person detection & counting">${icons.person}<span>People</span></button>`;
-        host.appendChild(cluster);
+        bar.appendChild(cluster);
 
+        host.appendChild(bar);
+
+        // Sit the bar just above the tile caption; its height depends on whether
+        // the location line wraps, so it is measured instead of hard-coded.
+        const tileMeta = tile.querySelector?.('.tile__meta');
+        function positionBar() {
+            const offset = tileMeta?.offsetHeight ? tileMeta.offsetHeight + 4 : 34;
+            if (bar.style.bottom !== `${offset}px`) bar.style.bottom = `${offset}px`;
+
+            // On a dense 4x4 tile there is no room for a permanent strip: the
+            // counts appear when the operator points at the tile.
+            bar.classList.toggle('is-compact', host.clientHeight > 0 && host.clientHeight < 260);
+        }
+
+        // A 4x4 tile is too small for the settings sheet: tiles open the camera
+        // view instead, and the modal docks the full panel beside the video.
         const panel = document.createElement('div');
-        panel.className = 'dt-panel';
+        panel.className = variant === 'modal' ? 'dt-panel dt-panel--modal' : 'dt-panel';
         panel.hidden = true;
         panel.innerHTML = `
             <header class="dt-panel__head">
@@ -162,7 +183,10 @@
             </p>
             <p class="dt-hint" data-dt-alarm hidden>Zone occupancy exceeded.</p>`;
 
-        host.appendChild(panel);
+        if (variant === 'modal') {
+            panel.hidden = false;
+            host.appendChild(panel);
+        }
 
         if (!state.canManage) {
             panel.querySelectorAll('[data-dt-draw], [data-dt-flip], [data-dt-clear], [data-dt-confidence], [data-dt-boxes], [data-dt-threshold]')
@@ -561,6 +585,7 @@
         }
 
         function updateHud() {
+            positionBar();
             if (el.in) el.in.textContent = String(state.counts.in);
             if (el.out) el.out.textContent = String(state.counts.out);
             if (el.inside) el.inside.textContent = String(state.counts.inside);
@@ -572,14 +597,27 @@
         }
 
         /* --------------------------------------------------- interactions */
+        function showSettings() {
+            if (variant === 'modal') {
+                panel.hidden = false;
+                return;
+            }
+
+            options.onOpen?.();
+        }
+
         el.counts.addEventListener('click', (event) => {
             event.stopPropagation();
-            panel.hidden = false;
+            showSettings();
         });
 
         host.querySelector('[data-dt-open]')?.addEventListener('click', (event) => {
             event.stopPropagation();
-            panel.hidden = !panel.hidden;
+            if (variant === 'modal') {
+                panel.hidden = !panel.hidden;
+            } else {
+                options.onOpen?.();
+            }
         });
 
         panel.querySelector('[data-dt-close]')?.addEventListener('click', (event) => {
@@ -738,6 +776,7 @@
         function persist() {
             // The worker idles when detection is off, even for viewers.
             worker.postMessage({ type: 'active', active: state.config.enabled });
+            bar.classList.toggle('is-live', state.config.enabled);
 
             if (!state.canManage) return;
 
@@ -753,6 +792,10 @@
                         config: state.config,
                         events: [],
                     });
+
+                    // The wall tile and the camera view share this record, so a
+                    // rebuilt tile picks the saved settings up without a reload.
+                    camera.analytics = state.config;
                 } catch (error) {
                     Argus.toast?.(error.message || 'Could not save detection settings.', 'error');
                 }
@@ -807,8 +850,7 @@
                 window.removeEventListener('keydown', onKey);
                 worker.terminate();
                 overlay.remove();
-                counts.remove();
-                cluster.remove();
+                bar.remove();
                 panel.remove();
                 instances.delete(key);
             },

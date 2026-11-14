@@ -2316,23 +2316,50 @@ body.page-wall .content {
     cursor: crosshair;
 }
 
-.dt-counts {
+.dt-bar {
     position: absolute;
-    top: 58px;
     left: 8px;
-    z-index: 3;
+    right: 8px;
+    bottom: 34px;
+    z-index: 4;
     display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+}
+
+.dt-bar > * {
     pointer-events: auto;
+}
+
+.dt-counts {
+    display: none;
+    gap: 3px;
     cursor: pointer;
+    min-width: 0;
+}
+
+.dt-bar.is-live .dt-counts {
+    display: flex;
+}
+
+.dt-bar.is-compact {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.tile:hover .dt-bar.is-compact,
+.tile.is-selected .dt-bar.is-compact,
+.dt-bar.is-compact:focus-within {
+    opacity: 1;
 }
 
 .dt-counts__item {
     display: inline-flex;
     align-items: baseline;
-    gap: 3px;
-    padding: 2px 5px;
+    gap: 2px;
+    padding: 1px 4px;
+    white-space: nowrap;
     border-radius: 5px;
     background: rgba(4, 7, 10, 0.68);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2357,19 +2384,16 @@ body.page-wall .content {
 }
 
 .dt-cluster {
-    position: absolute;
-    top: 34px;
-    left: 8px;
-    z-index: 4;
     display: flex;
     gap: 4px;
-    opacity: 0.55;
+    margin-left: auto;
+    opacity: 0;
     transition: opacity 0.15s ease;
 }
 
 .tile:hover .dt-cluster,
 .dt-cluster:focus-within,
-.modal__media .dt-cluster {
+.modal .dt-cluster {
     opacity: 1;
 }
 
@@ -2418,6 +2442,14 @@ body.page-wall .content {
 
 .dt-panel[hidden] {
     display: none;
+}
+
+.dt-panel--modal {
+    left: auto;
+    right: 12px;
+    top: 52px;
+    bottom: auto;
+    width: min(240px, calc(100% - 24px));
 }
 
 .dt-panel__head {

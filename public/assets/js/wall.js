@@ -177,14 +177,7 @@
             viewport.setSource(buildMediaSource(camera), camera.mode === 'hls' ? 'video' : 'image');
             viewport.setNightVision(state.nightVision);
 
-            // Person detection runs in a worker; this overlay draws at 30 FPS.
-            window.Argus.detector?.attach({
-                camera,
-                tile,
-                viewport,
-                key: camera.id,
-                canManage: state.canManage,
-            });
+            attachTileDetector(camera, tile, viewport);
         }
 
         tile.addEventListener('click', (event) => {
@@ -573,6 +566,19 @@
         }
     }
 
+    /** Person detection runs in a worker; the overlay draws at 30 FPS. */
+    function attachTileDetector(camera, tile, viewport) {
+        window.Argus.detector?.attach({
+            camera,
+            tile,
+            viewport,
+            key: camera.id,
+            canManage: state.canManage,
+            variant: 'tile',
+            onOpen: () => openCameraModal(camera.id),
+        });
+    }
+
     function stopAllStreams() {
         window.Argus.detector?.detachAll();
 
@@ -923,6 +929,7 @@
             viewport,
             key: `modal-${camera.id}`,
             canManage: state.canManage,
+            variant: 'modal',
         });
 
         const source = buildMediaSource(camera);
@@ -1007,6 +1014,15 @@
             destroyPlayer(modalKey);
             viewport.destroy();
             mediaHost.replaceChildren();
+
+            // Detection settings may have changed in the camera view: rebuild
+            // the tile overlay from the refreshed camera record.
+            const tile = grid.querySelector(`.tile[data-camera-id="${camera.id}"]`);
+            const tileViewport = viewports.get(camera.id);
+            if (tile && tileViewport && tileViewport.host.isConnected) {
+                window.Argus.detector?.detach(camera.id);
+                attachTileDetector(camera, tile, tileViewport);
+            }
         };
 
         const escHandler = (event) => {

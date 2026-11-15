@@ -170,6 +170,8 @@ $wallData = [
                 <div><dt>Transport</dt><dd data-inspector-transport>—</dd></div>
                 <div><dt>Latency target</dt><dd data-inspector-latency>—</dd></div>
                 <div><dt>Resolution</dt><dd data-inspector-resolution>—</dd></div>
+                <div><dt>Bitrate</dt><dd data-inspector-bitrate>—</dd></div>
+                <div><dt>WebRTC RTT</dt><dd data-inspector-rtt>—</dd></div>
                 <div><dt>Last probe</dt><dd data-inspector-probe>—</dd></div>
             </dl>
         </section>

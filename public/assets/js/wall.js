@@ -885,17 +885,65 @@
     }
 
     /** WebRTC (WHEP) first; rejects quickly so HLS/MSE can take over. */
-    async function startWebrtc(video, camera) {
+    async function startWebrtc(video, camera, viewport = null) {
         if (!camera.webrtc_url || !window.RTCPeerConnection) {
             throw new Error('WebRTC is not available.');
         }
 
         const peer = new RTCPeerConnection({ iceServers: [] });
         let closed = false;
+        let statsTimer = 0;
+        let lastBytes = null;
+        let lastSampleAt = 0;
+
+        // Real inbound bytes and candidate-pair RTT from the RTC stats API.
+        const sampleStats = async () => {
+            if (closed) return;
+            try {
+                const report = await peer.getStats();
+                let bytes = null;
+                let rtt = null;
+
+                report.forEach((entry) => {
+                    if (
+                        entry.type === 'inbound-rtp' &&
+                        (entry.kind === 'video' || entry.mediaType === 'video') &&
+                        typeof entry.bytesReceived === 'number'
+                    ) {
+                        bytes = entry.bytesReceived;
+                    }
+                    if (
+                        entry.type === 'candidate-pair' &&
+                        entry.state === 'succeeded' &&
+                        typeof entry.currentRoundTripTime === 'number'
+                    ) {
+                        rtt = entry.currentRoundTripTime * 1000;
+                    }
+                });
+
+                const now = performance.now();
+                let bitrate = null;
+                if (bytes !== null && lastBytes !== null && now > lastSampleAt) {
+                    bitrate = ((bytes - lastBytes) * 8 * 1000) / (now - lastSampleAt);
+                }
+                if (bytes !== null) {
+                    lastBytes = bytes;
+                    lastSampleAt = now;
+                }
+
+                viewport?.setNetwork?.({ bitrate, rtt });
+            } catch (error) {
+                /* stats are best-effort */
+            }
+        };
+
+        statsTimer = window.setInterval(sampleStats, 1000);
 
         const close = () => {
             if (closed) return;
             closed = true;
+            window.clearInterval(statsTimer);
+            viewport?.setNetwork?.({ bitrate: null, rtt: null });
             try {
                 peer.close();
             } catch (error) {
@@ -1033,6 +1081,29 @@
             if (typeof player.latency === 'number' && player.latency > 0) {
                 viewport?.setMeasuredLatency(player.latency * 1000);
             }
+
+            // Until fragments arrive, report hls.js' own bandwidth estimate.
+            if (typeof player.bandwidthEstimate === 'number' && player.bandwidthEstimate > 0) {
+                viewport?.setNetwork?.({ bitrate: player.bandwidthEstimate });
+            }
+        });
+
+        // Actual media bitrate from the bytes of the last 10 s of fragments.
+        const fragments = [];
+        player.on(Hls.Events.FRAG_LOADED, (event, data) => {
+            const stats = data?.payload?.stats || {};
+            const bytes = Number(stats.loaded ?? stats.total ?? 0);
+            if (!bytes) return;
+
+            const now = performance.now();
+            fragments.push({ at: now, bytes });
+
+            const cutoff = now - 10000;
+            while (fragments.length > 1 && fragments[0].at < cutoff) fragments.shift();
+
+            const total = fragments.reduce((sum, item) => sum + item.bytes, 0);
+            const span = Math.max(1000, now - fragments[0].at);
+            viewport?.setNetwork?.({ bitrate: (total * 8 * 1000) / span });
         });
 
         player.loadSource(response.playlist);
@@ -1049,7 +1120,7 @@
         viewport?.showTestPattern(false);
 
         try {
-            await startWebrtc(video, camera);
+            await startWebrtc(video, camera, viewport);
             viewport?.setMeasuredLatency(camera.latency_ms);
             return;
         } catch (error) {
@@ -1163,6 +1234,15 @@
         set('[data-inspector-buffer]', `${Math.round(Number(telemetry.buffer || 0))}%`);
         set('[data-inspector-latency]', `${Math.round(Number(telemetry.latency || camera.latency_ms || 0))} ms`);
         set('[data-inspector-resolution]', width && height ? `${width} × ${height}` : '—');
+        set('[data-inspector-bitrate]', formatBitrate(telemetry.bitrate));
+        set('[data-inspector-rtt]', Number(telemetry.rtt) > 0 ? `${Math.round(Number(telemetry.rtt))} ms` : '—');
+    }
+
+    function formatBitrate(value) {
+        const bps = Number(value);
+        if (!Number.isFinite(bps) || bps <= 0) return '—';
+
+        return bps >= 1e6 ? `${(bps / 1e6).toFixed(2)} Mbps` : `${Math.round(bps / 1e3)} kbps`;
     }
 
     function closeInspector() {

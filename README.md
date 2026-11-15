@@ -293,7 +293,9 @@ button in the top bar).
   on an outside click or `Esc`. Long panels deliberately escape the tile bounds
   on dense 4x4 layouts instead of scrolling inside a 150 px box.
 - **Camera inspector** — *Details* slides out a drawer with live FPS, frame time,
-  jitter, buffer, transport, latency target, resolution and last probe; the HTTP
+  jitter, buffer, transport, latency target, resolution, measured bitrate and
+  WebRTC round-trip time (the RTC stats API for WebRTC, fragment bytes for HLS),
+  and last probe; the HTTP
   endpoint, RTSP path, driver and mode; and a credential verifier that decrypts
   the stored password server-side and reports `AUTH_VERIFIED` or the encoding
   problem, with the secret masked in the activity log. Only administrators and

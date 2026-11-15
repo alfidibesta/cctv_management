@@ -111,6 +111,7 @@
             lastDrawTs: 0,
             drag: null,
             sourceReady: false,
+            network: { bitrate: null, rtt: null },
             patternAt: 0,
             testPattern: false,
             destroyed: false,
@@ -441,6 +442,9 @@
                 fps: Number(state.fps.toFixed(1)),
                 frameTime: Number(state.frameTime.toFixed(1)),
                 zoom: Number(state.zoom.toFixed(1)),
+                // Measured by the transport (WebRTC stats / hls.js fragments).
+                bitrate: state.network.bitrate,
+                rtt: state.network.rtt,
             };
 
             if (settings.hud) {
@@ -576,6 +580,18 @@
             state.measureLatency = Number.isFinite(Number(ms)) && Number(ms) > 0 ? Number(ms) : null;
         }
 
+        /** Network measurements from WebRTC statistics or hls.js fragments. */
+        function setNetwork(next = {}) {
+            if ('bitrate' in next) {
+                const bitrate = Number(next.bitrate);
+                state.network.bitrate = Number.isFinite(bitrate) && bitrate > 0 ? bitrate : null;
+            }
+            if ('rtt' in next) {
+                const rtt = Number(next.rtt);
+                state.network.rtt = Number.isFinite(rtt) && rtt > 0 ? rtt : null;
+            }
+        }
+
         function setPip(visible) {
             settings.pip = Boolean(visible);
             if (els.pip) els.pip.hidden = !settings.pip;
@@ -612,13 +628,23 @@
             setNightVision,
             setLatencyTarget,
             setMeasuredLatency,
+            setNetwork,
             setPip,
             snapshot,
             get zoom() {
                 return state.zoom;
             },
             get telemetry() {
-                return state.telemetry || { latency: state.latencyTarget, jitter: 0, buffer: 100, fps: 0, frameTime: 0, zoom: 1 };
+                return state.telemetry || {
+                    latency: state.latencyTarget,
+                    jitter: 0,
+                    buffer: 100,
+                    fps: 0,
+                    frameTime: 0,
+                    zoom: 1,
+                    bitrate: null,
+                    rtt: null,
+                };
             },
             /** Current source→display mapping, null until a frame is drawn. */
             getProjection() {

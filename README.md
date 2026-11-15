@@ -274,6 +274,33 @@ starts one segment behind the live edge and may play at up to 2× speed to catch
 up, so a 1 s segment setting lands roughly 1.5–2.5 s behind live; 2 s segments
 land around 3–4 s.
 
+### The video-first wall
+
+The wall is built to show video, not chrome: 1 px gutters, no tile borders, and
+a collapsed icon-only navigation rail by default (expand it with the panel
+button in the top bar).
+
+- **Minimal tile HUD** — a translucent pill with the camera name and a LIVE dot,
+  plus a tiny bottom-right `IN / OUT` badge when people counting is live. Stream
+  telemetry (latency, jitter, buffer, FPS, frame time) stays hidden until you
+  hover the tile or switch on *Telemetry* in the wall bar.
+- **Hover quick actions** — a glass bar appears over each tile with six icon
+  buttons: *Zoom* (the 1.0x–8.0x slider, pan mode and reset), *AI* (detection,
+  confidence, boxes, tripwire and zone), *Stream* (UDP/TCP and the 50–2000 ms
+  jitter buffer, saved per camera), *IR* (night vision), *Snap* (PNG) and
+  *Details*.
+- **Popovers** — *AI* and *Stream* open compact panels over the tile and close
+  on an outside click or `Esc`. Long panels deliberately escape the tile bounds
+  on dense 4x4 layouts instead of scrolling inside a 150 px box.
+- **Camera inspector** — *Details* slides out a drawer with live FPS, frame time,
+  jitter, buffer, transport, latency target, resolution and last probe; the HTTP
+  endpoint, RTSP path, driver and mode; and a credential verifier that decrypts
+  the stored password server-side and reports `AUTH_VERIFIED` or the encoding
+  problem, with the secret masked in the activity log. Only administrators and
+  operators can verify; viewers see the rest read-only.
+- **Theater mode** — hides the navigation rail, top bar and wall bar and gives
+  the grid the whole viewport. `Esc` restores everything.
+
 ### Digital zoom, pan and night vision
 
 Zoom and pan happen in the browser, on a canvas that composites the camera
@@ -284,14 +311,14 @@ stream mode, and two operators can look at different regions of the same feed.
 | --- | --- |
 | Mouse wheel | Zoom 1.0x–8.0x at the cursor position |
 | Drag (when zoomed) | Pan the visible region |
-| Slider / + / − | Zoom without a mouse wheel |
+| Slider / + / − | Zoom without a mouse wheel (behind the tile's Zoom action) |
 | `Reset 1.0x` or double-click | Back to the full frame |
-| PiP mini-map | Shows the visible region inside the full frame |
+| PiP mini-map | Shows the visible region inside the full frame while zoomed |
 | Night vision | Grayscale + green screen blend, per tile or whole wall |
 
-The tile HUD reports live latency, jitter, buffer health, measured FPS and
-frame time. Snapshots are captured from the canvas, so they include the current
-zoom and night-vision filter.
+The hover HUD and the *Telemetry* toggle report live latency, jitter, buffer
+health, measured FPS and frame time. Snapshots are captured from the canvas, so
+they include the current zoom and night-vision filter.
 
 ### RTSP latency and buffer
 

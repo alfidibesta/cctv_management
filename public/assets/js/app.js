@@ -137,7 +137,7 @@
 
     applyTheme(pref.get('theme') === 'light' ? 'light' : 'dark');
     applyDensity(pref.get('density') === 'compact' ? 'compact' : 'comfortable');
-    applyRail(pref.get('rail') === '1');
+    applyRail(pref.get('rail') !== '0');
 
     document.addEventListener('click', (event) => {
         if (event.target.closest('[data-theme-toggle]')) {

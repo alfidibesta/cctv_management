@@ -126,29 +126,18 @@
             + '<span class="dt-counts__item">INSIDE <b data-dt-inside>0</b></span>';
         bar.appendChild(counts);
 
-        const cluster = document.createElement('div');
-        cluster.className = 'dt-cluster';
-        cluster.innerHTML = `<button type="button" class="dt-btn" data-dt-open title="Person detection & counting">${icons.person}<span>People</span></button>`;
-        bar.appendChild(cluster);
+        if (variant === 'modal') {
+            const cluster = document.createElement('div');
+            cluster.className = 'dt-cluster';
+            cluster.innerHTML = `<button type="button" class="dt-btn" data-dt-open title="Person detection & counting">${icons.person}<span>People</span></button>`;
+            bar.appendChild(cluster);
+        }
 
         host.appendChild(bar);
 
-        // Sit the bar just above the tile caption; its height depends on whether
-        // the location line wraps, so it is measured instead of hard-coded.
-        const tileMeta = tile.querySelector?.('.tile__meta');
-        function positionBar() {
-            const offset = tileMeta?.offsetHeight ? tileMeta.offsetHeight + 4 : 34;
-            if (bar.style.bottom !== `${offset}px`) bar.style.bottom = `${offset}px`;
-
-            // On a dense 4x4 tile there is no room for a permanent strip: the
-            // counts appear when the operator points at the tile.
-            bar.classList.toggle('is-compact', host.clientHeight > 0 && host.clientHeight < 260);
-        }
-
-        // A 4x4 tile is too small for the settings sheet: tiles open the camera
-        // view instead, and the modal docks the full panel beside the video.
+        // Tile: a popover opened from the quick-action bar. Modal: docked sheet.
         const panel = document.createElement('div');
-        panel.className = variant === 'modal' ? 'dt-panel dt-panel--modal' : 'dt-panel';
+        panel.className = variant === 'modal' ? 'dt-panel dt-panel--modal' : 'dt-panel dt-panel--popover';
         panel.hidden = true;
         panel.innerHTML = `
             <header class="dt-panel__head">
@@ -183,10 +172,8 @@
             </p>
             <p class="dt-hint" data-dt-alarm hidden>Zone occupancy exceeded.</p>`;
 
-        if (variant === 'modal') {
-            panel.hidden = false;
-            host.appendChild(panel);
-        }
+        panel.hidden = variant !== 'modal';
+        host.appendChild(panel);
 
         if (!state.canManage) {
             panel.querySelectorAll('[data-dt-draw], [data-dt-flip], [data-dt-clear], [data-dt-confidence], [data-dt-boxes], [data-dt-threshold]')
@@ -585,7 +572,6 @@
         }
 
         function updateHud() {
-            positionBar();
             if (el.in) el.in.textContent = String(state.counts.in);
             if (el.out) el.out.textContent = String(state.counts.out);
             if (el.inside) el.inside.textContent = String(state.counts.inside);
@@ -598,12 +584,7 @@
 
         /* --------------------------------------------------- interactions */
         function showSettings() {
-            if (variant === 'modal') {
-                panel.hidden = false;
-                return;
-            }
-
-            options.onOpen?.();
+            panel.hidden = false;
         }
 
         el.counts.addEventListener('click', (event) => {
@@ -841,6 +822,24 @@
             key,
             config: state.config,
             counts: state.counts,
+            openPanel() {
+                panel.hidden = false;
+            },
+            togglePanel() {
+                panel.hidden = !panel.hidden;
+            },
+            closePanel() {
+                if (variant === 'tile') panel.hidden = true;
+            },
+            openPanel() {
+                panel.hidden = false;
+            },
+            togglePanel() {
+                panel.hidden = !panel.hidden;
+            },
+            closePanel() {
+                if (variant === 'tile') panel.hidden = true;
+            },
             detach() {
                 state.running = false;
                 cancelAnimationFrame(raf);
@@ -872,6 +871,14 @@
             .forEach(detach);
     }
 
+    function closePanels() {
+        instances.forEach((instance) => instance.closePanel?.());
+    }
+
+    function togglePanel(cameraId) {
+        instances.get(String(cameraId))?.togglePanel?.();
+    }
+
     function centre(box) {
         return { x: box.x + box.w / 2, y: box.y + box.h / 2 };
     }
@@ -887,5 +894,5 @@
         };
     }
 
-    Argus.detector = { attach, detach, detachAll };
+    Argus.detector = { attach, detach, detachAll, closePanels, togglePanel };
 })();

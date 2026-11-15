@@ -30,7 +30,9 @@ $flash = flash_messages();
                 var rail = localStorage.getItem('argus.rail');
                 if (theme === 'light') document.documentElement.dataset.theme = 'light';
                 if (density === 'compact') document.documentElement.dataset.density = 'compact';
-                if (rail === '1') document.documentElement.dataset.rail = '1';
+                // The wall is video-first: the rail is icon-only unless the
+                // user has explicitly expanded it.
+                if (rail !== '0') document.documentElement.dataset.rail = '1';
             } catch (e) { /* storage blocked */ }
         })();
     </script>

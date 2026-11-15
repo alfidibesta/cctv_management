@@ -3797,3 +3797,513 @@ body.guest {
 .tile:not(.tile--empty) .tile__meta p {
     color: #a9b4bd;
 }
+
+/* ================================================= video-first wall chrome
+ * The wall is a video surface first: 1px gutters, a name pill, an optional
+ * IN/OUT badge, and nothing else until the operator asks for it.
+ */
+.wall-grid {
+    gap: 1px;
+    padding: 1px;
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.tile {
+    border-radius: 0;
+    border-color: transparent;
+}
+
+.tile.is-selected {
+    border-color: rgba(95, 227, 192, 0.7);
+    box-shadow: inset 0 0 0 1px rgba(95, 227, 192, 0.45);
+}
+
+.tile__shade {
+    background:
+        linear-gradient(180deg, rgba(4, 7, 10, 0.5) 0%, rgba(4, 7, 10, 0) 16%),
+        linear-gradient(0deg, rgba(4, 7, 10, 0.4) 0%, rgba(4, 7, 10, 0) 20%);
+}
+
+/* Name pill — the only permanent chrome on a feed. */
+.tile__pill {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: min(60%, 230px);
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: rgba(5, 9, 12, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px) saturate(130%);
+    font-size: 11px;
+    line-height: 1.1;
+    pointer-events: none;
+}
+
+.tile__pill .dot {
+    width: 7px;
+    height: 7px;
+}
+
+.tile__pill-name {
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile__pill-live {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8c98a2;
+}
+
+.tile__pill .dot--online ~ .tile__pill-live {
+    color: #5fe3c0;
+}
+
+.tile__pill .dot--offline ~ .tile__pill-live {
+    color: #ff9d90;
+}
+
+/* Location line waits for a hover. */
+.tile .tile__meta {
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    padding-bottom: 11px;
+}
+
+.tile:hover .tile__meta,
+.tile:focus-within .tile__meta {
+    opacity: 1;
+    transform: none;
+}
+
+.tile__meta {
+    display: none;
+}
+
+.tile .tile__meta {
+    display: none;
+}
+
+/* Hover quick actions. */
+.tile__quick {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    z-index: 6;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 10px;
+    background: rgba(6, 10, 13, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(16px) saturate(150%);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(6px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.tile:hover .tile__quick,
+.tile:focus-within .tile__quick,
+.tile__quick:hover {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%);
+}
+
+.tile__quick-btn {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: #cfdae0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.tile__quick-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: #fff;
+}
+
+.tile__quick-btn .icon {
+    width: 15px;
+    height: 15px;
+}
+
+/* Telemetry is opt-in or hover-only, and always one compact row. */
+.tile .vp__hud {
+    top: 36px;
+    right: 8px;
+    max-width: calc(100% - 16px);
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+}
+
+.tile:hover .vp__hud,
+.tile:focus-within .vp__hud,
+.wall-grid.is-telemetry .tile .vp__hud,
+.modal__media .vp__hud {
+    opacity: 1;
+}
+
+/* Zoom slider only while the zoom action is armed; PiP follows it. */
+.wall-grid .tile .vp__bar,
+.wall-grid .tile:hover .vp__bar,
+.wall-grid .tile:focus-within .vp__bar {
+    bottom: 52px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(6px);
+}
+
+.wall-grid .tile.is-zoom .vp__bar,
+.wall-grid .tile.is-zoom .vp__bar:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%);
+}
+
+.tile .vp__pip {
+    display: none;
+}
+
+.tile.is-zoom .vp__pip {
+    display: block;
+    bottom: 52px;
+}
+
+/* Tiny IN/OUT badge, bottom-right. */
+.tile .dt-bar {
+    left: auto;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+}
+
+.tile .dt-bar.is-compact {
+    opacity: 1;
+}
+
+.tile .dt-counts__item {
+    padding: 1px 5px;
+    font-size: 8px;
+    background: rgba(4, 7, 10, 0.5);
+}
+
+.tile .dt-counts__item:nth-child(3) {
+    display: none;
+}
+
+.tile .dt-cluster {
+    display: none;
+}
+
+/* Detector + stream popovers float above the quick bar. */
+.tile .dt-panel--popover,
+.tile__pop {
+    position: absolute;
+    right: 8px;
+    left: auto;
+    top: 44px;
+    bottom: auto;
+    z-index: 8;
+    width: min(250px, calc(100% - 16px));
+}
+
+/* A popover may be taller than a 3x3 or 4x4 tile; let it escape instead of
+ * scrolling inside a 230px box. Only while one is actually open. */
+.tile:has(.tile__pop:not([hidden])),
+.tile:has(.dt-panel:not([hidden])) {
+    overflow: visible;
+    z-index: 30;
+}
+
+.tile__pop {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 11px;
+    border: 1px solid var(--border-strong);
+    background: rgba(7, 11, 14, 0.97);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5);
+    text-align: left;
+}
+
+.tile__pop[hidden] {
+    display: none;
+}
+
+.tile__pop-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.tile__pop-head strong {
+    font-size: 10.5px;
+}
+
+.tile__pop-close {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.tile__pop-close .icon {
+    width: 11px;
+    height: 11px;
+}
+
+.tile__pop-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 9.5px;
+    color: var(--muted);
+}
+
+.tile__pop-field b {
+    color: var(--accent);
+    font-family: var(--mono);
+}
+
+.tile__pop-range {
+    width: 100%;
+    accent-color: var(--accent);
+}
+
+.tile__pop-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-soft);
+}
+
+.tile__pop-check input {
+    accent-color: var(--accent);
+}
+
+.tile__pop-hint {
+    margin: 0;
+    font-size: 9px;
+    color: var(--muted);
+}
+
+.segmented--xs {
+    align-self: flex-start;
+}
+
+.segmented--xs .segmented__btn {
+    height: 22px;
+    padding: 0 8px;
+    font-size: 9.5px;
+}
+
+/* ------------------------------------------------------ camera inspector */
+.inspector {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 95;
+    width: min(390px, 100%);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-soft);
+    border-left: 1px solid var(--border-strong);
+    transform: translateX(101%);
+    transition: transform 0.22s ease;
+    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.4);
+}
+
+.inspector.is-open {
+    transform: none;
+}
+
+.inspector__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.inspector__eyebrow {
+    margin: 0 0 3px;
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.inspector__head h2 {
+    font-size: 17px;
+    letter-spacing: -0.01em;
+}
+
+.inspector__head p:last-child {
+    margin: 2px 0 0;
+    font-size: 11.5px;
+    color: var(--muted);
+}
+
+.inspector__body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 18px 20px;
+}
+
+.inspector__section {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.inspector__section h3 {
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.inspector__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.inspector__grid dt {
+    font-size: 9.5px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+}
+
+.inspector__grid dd {
+    margin: 1px 0 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.inspector__grid--wide {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.inspector__verdict {
+    margin: 0 0 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+}
+
+.inspector__verdict.is-ok {
+    background: rgba(95, 227, 192, 0.12);
+    color: #7defcd;
+}
+
+.inspector__verdict.is-bad {
+    background: rgba(255, 125, 107, 0.12);
+    color: #ff9d90;
+}
+
+.inspector__verify {
+    padding: 10px;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+}
+
+.inspector__verify code {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    overflow-wrap: anywhere;
+}
+
+.inspector__verify[hidden] {
+    display: none;
+}
+
+.inspector__issues {
+    margin: 8px 0 0;
+    padding-left: 16px;
+    font-size: 10.5px;
+    color: #ffb3a8;
+}
+
+.inspector__foot {
+    display: flex;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------- theater / zen */
+:root[data-zen="1"] .sidebar,
+:root[data-zen="1"] .topbar,
+:root[data-zen="1"] .wall-bar {
+    display: none;
+}
+
+:root[data-zen="1"] .shell {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-zen="1"] .content {
+    padding: 0;
+    height: 100dvh;
+    display: flex;
+}
+
+:root[data-zen="1"] .wall {
+    height: 100dvh;
+    width: 100%;
+}
+
+:root[data-zen="1"] .wall-grid {
+    height: 100dvh;
+    padding: 0;
+    gap: 1px;
+}
+
+:root[data-zen="1"] .tile {
+    border-radius: 0;
+}
+

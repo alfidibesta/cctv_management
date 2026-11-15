@@ -59,7 +59,15 @@ $wallData = [
 
         <button type="button" class="btn btn--ghost btn--sm" data-night-vision aria-pressed="false"
                 title="Client-side IR night vision">
-            <?= icon('moon') ?> <span>Night vision</span>
+            <?= icon('moon') ?> <span class="hide-sm">Night vision</span>
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm" data-telemetry-toggle aria-pressed="false"
+                title="Show stream telemetry on every tile">
+            <?= icon('activity') ?> <span class="hide-sm">Telemetry</span>
+        </button>
+        <button type="button" class="btn btn--ghost btn--sm" data-wall-zen aria-pressed="false"
+                title="Theater mode — hide all outer chrome (Esc exits)">
+            <?= icon('expand') ?> <span class="hide-sm">Theater</span>
         </button>
 
         <div class="wall-stat" title="Cameras online">
@@ -139,6 +147,60 @@ $wallData = [
     <?php endif; ?>
 </aside>
 <div class="scrim" data-scrim hidden></div>
+
+<!-- Camera inspector: telemetry, endpoint and credential verifier -->
+<aside class="inspector" data-inspector aria-hidden="true" aria-label="Camera inspector">
+    <header class="inspector__head">
+        <div>
+            <p class="inspector__eyebrow">Camera inspector</p>
+            <h2 data-inspector-title>Camera</h2>
+            <p data-inspector-sub></p>
+        </div>
+        <button type="button" class="icon-btn" data-inspector-close aria-label="Close inspector"><?= icon('close') ?></button>
+    </header>
+
+    <div class="inspector__body">
+        <section class="inspector__section">
+            <h3>Live telemetry</h3>
+            <dl class="inspector__grid">
+                <div><dt>FPS</dt><dd data-inspector-fps>—</dd></div>
+                <div><dt>Frame time</dt><dd data-inspector-frame>—</dd></div>
+                <div><dt>Jitter</dt><dd data-inspector-jitter>—</dd></div>
+                <div><dt>Buffer</dt><dd data-inspector-buffer>—</dd></div>
+                <div><dt>Transport</dt><dd data-inspector-transport>—</dd></div>
+                <div><dt>Latency target</dt><dd data-inspector-latency>—</dd></div>
+                <div><dt>Resolution</dt><dd data-inspector-resolution>—</dd></div>
+                <div><dt>Last probe</dt><dd data-inspector-probe>—</dd></div>
+            </dl>
+        </section>
+
+        <section class="inspector__section">
+            <h3>Stream endpoint</h3>
+            <dl class="inspector__grid inspector__grid--wide">
+                <div><dt>HTTP endpoint</dt><dd data-inspector-endpoint>—</dd></div>
+                <div><dt>RTSP</dt><dd data-inspector-rtsp>—</dd></div>
+                <div><dt>Driver</dt><dd data-inspector-driver>—</dd></div>
+                <div><dt>Mode</dt><dd data-inspector-mode>—</dd></div>
+            </dl>
+        </section>
+
+        <section class="inspector__section">
+            <h3>Credential verifier</h3>
+            <p class="field__hint">
+                Decrypts the stored password server-side and shows the exact URI handed to ffmpeg.
+                The activity log records the verdict with the secret masked.
+            </p>
+            <button type="button" class="btn btn--subtle btn--sm" data-inspector-verify>Verify credentials</button>
+            <div class="inspector__verify" data-inspector-verify-result hidden></div>
+        </section>
+    </div>
+
+    <footer class="inspector__foot">
+        <a class="btn btn--ghost btn--sm" data-inspector-edit href="#">Open camera settings</a>
+        <button type="button" class="btn btn--ghost btn--sm" data-inspector-remove hidden>Remove from wall</button>
+    </footer>
+</aside>
+<div class="scrim" data-inspector-scrim hidden></div>
 
 <!-- Expanded camera view: digital zoom, pan, PiP and latency HUD -->
 <div class="modal" data-camera-modal hidden>

@@ -59,6 +59,13 @@ final class WallController extends Controller
                 'frame_drop'   => Hls::frameDrop($camera),
                 'last_seen'    => $camera['last_seen_at'],
                 'last_error'   => $camera['last_error'],
+                'last_latency_ms' => $camera['last_latency_ms'] !== null ? (int) $camera['last_latency_ms'] : null,
+                // Inspector drawer: everything the camera talks to, no secret.
+                'endpoint'     => trim((string) ($camera['host'] ?? '') . ':' . (string) ($camera['port'] ?? '')),
+                'rtsp_port'    => (int) ($camera['rtsp_port'] ?? 554),
+                'rtsp_path'    => (string) ($camera['rtsp_path'] ?? ''),
+                'channel'      => (int) ($camera['channel'] ?? 1),
+                'updated_at'   => $camera['updated_at'],
                 'webrtc_url'   => MediaServer::enabled() ? url('/api/webrtc_proxy.php?camera=' . $id) : null,
                 'analytics'    => Analytics::config($camera['analytics_json'] ?? null),
                 'analytics_backend' => $isDemo ? 'simulate' : $backend,

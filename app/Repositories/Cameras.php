@@ -179,6 +179,17 @@ final class Cameras
         Db::update('cameras', $data, 'id = :id', ['id' => $id]);
     }
 
+    /** Quick per-camera stream tuning from the wall popover. */
+    public static function saveStreamSettings(int $id, string $transport, int $latencyMs, bool $frameDrop): void
+    {
+        Db::update('cameras', [
+            'transport'   => $transport,
+            'latency_ms'  => $latencyMs,
+            'frame_drop'  => $frameDrop ? 1 : 0,
+            'updated_at'  => gmdate('Y-m-d H:i:s'),
+        ], 'id = :id', ['id' => $id]);
+    }
+
     public static function delete(int $id): void
     {
         Db::delete('cameras', 'id = :id', ['id' => $id]);

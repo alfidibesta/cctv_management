@@ -163,6 +163,47 @@ final class ApiController extends Controller
         ]);
     }
 
+    /**
+     * Per-camera transport and jitter buffer, saved from the wall's stream
+     * popover. The next stream start picks the new values up.
+     */
+    public function stream(string $id): void
+    {
+        Auth::requireCameraManager();
+
+        $camera = CameraGate::resolve((int) $id, true);
+        $payload = json_decode((string) file_get_contents('php://input'), true);
+        $payload = is_array($payload) ? $payload : $_POST;
+
+        $transport = strtolower((string) ($payload['transport'] ?? 'tcp'));
+        $latency = (int) ($payload['latency_ms'] ?? 0);
+        $frameDrop = filter_var($payload['frame_drop'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if (!in_array($transport, ['udp', 'tcp'], true)) {
+            $this->json(['error' => 'Transport must be UDP or TCP.'], 422);
+        }
+
+        if ($latency < 50 || $latency > 2000) {
+            $this->json(['error' => 'The jitter buffer must be between 50 and 2000 ms.'], 422);
+        }
+
+        Cameras::saveStreamSettings((int) $camera['id'], $transport, $latency, $frameDrop);
+
+        Activity::log(
+            'camera.stream',
+            sprintf('%s stream set to %s with a %d ms buffer', $camera['name'], strtoupper($transport), $latency),
+            'camera',
+            (int) $camera['id']
+        );
+
+        $this->json([
+            'ok'         => true,
+            'transport'  => $transport,
+            'latency_ms' => $latency,
+            'frame_drop' => $frameDrop,
+        ]);
+    }
+
     /** Media mode the wall should use when WebRTC is unavailable. */
     private function fallbackFor(array $camera): string
     {

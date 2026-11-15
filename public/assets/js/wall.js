@@ -15,6 +15,10 @@
     const scrim = document.querySelector('[data-scrim]');
     const modal = document.querySelector('[data-camera-modal]');
     const nightButton = root.querySelector('[data-night-vision]');
+    const telemetryButton = root.querySelector('[data-telemetry-toggle]');
+    const zenButton = root.querySelector('[data-wall-zen]');
+    const inspector = document.querySelector('[data-inspector]');
+    const inspectorScrim = document.querySelector('[data-inspector-scrim]');
 
     const baseUrl = document.querySelector('meta[name="base-url"]')?.content || '/';
     const cameras = Array.isArray(config.cameras) ? config.cameras : [];
@@ -47,6 +51,10 @@
         download: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m8 11 4 4 4-4"/><path d="M4 19h16"/></svg>',
         close: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
         moon: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 14.2A8.4 8.4 0 0 1 9.8 3.8a8.4 8.4 0 1 0 10.4 10.4z"/></svg>',
+        zoom: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8.5 11h5M11 8.5v5"/></svg>',
+        ai: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6" width="10" height="12" rx="2"/><path d="M6.5 10.5v3M10.5 10.5v3M17 9.5l1.2 2.6 2.6 1.2-2.6 1.2L17 17.1l-1.2-2.6-2.6-1.2 2.6-1.2z"/></svg>',
+        sliders: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>',
+        info: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>',
     };
 
     const esc = (value) =>
@@ -136,21 +144,16 @@
         tile.dataset.slot = String(index);
         tile.dataset.cameraId = String(cameraId);
 
+        const transport = String(camera.transport || 'tcp').toLowerCase();
+        const latency = Math.max(50, Math.min(2000, Number(camera.latency_ms) || 300));
+
         tile.innerHTML = `
             <div class="tile__media" data-media></div>
             <div class="tile__shade"></div>
-            <div class="tile__top">
-                <span class="tile__status">
-                    <span class="dot dot--${esc(camera.status)}" data-wall-dot="${cameraId}"></span>
-                    <span data-wall-status>${esc(camera.status)}</span>
-                </span>
-                <div class="tile__actions">
-                    <button type="button" class="tile-btn" data-action="night" title="IR night vision">${icons.moon}</button>
-                    <button type="button" class="tile-btn" data-action="open" title="Open camera">${icons.open}</button>
-                    <button type="button" class="tile-btn" data-action="snapshot" title="Capture snapshot">${icons.download}</button>
-                    <button type="button" class="tile-btn" data-action="fullscreen" title="Fullscreen">${icons.expand}</button>
-                    <button type="button" class="tile-btn" data-action="clear" title="Remove from wall">${icons.close}</button>
-                </div>
+            <div class="tile__pill">
+                <span class="dot dot--${esc(camera.status)}" data-wall-dot="${cameraId}"></span>
+                <span class="tile__pill-name">${esc(camera.name)}</span>
+                <span class="tile__pill-live" data-wall-status>${camera.status === 'online' ? 'LIVE' : esc(camera.status)}</span>
             </div>
             <div class="tile__meta">
                 <div>
@@ -158,6 +161,37 @@
                     <p>${esc(camera.location || camera.group)}</p>
                 </div>
                 <span class="tile__badge">${esc(modeLabel(camera.mode))}</span>
+            </div>
+            <div class="tile__quick" data-quick-bar>
+                <button type="button" class="tile__quick-btn" data-quick="zoom" title="Digital zoom" aria-label="Digital zoom">${icons.zoom}</button>
+                <button type="button" class="tile__quick-btn" data-quick="ai" title="Person detection & counting" aria-label="Person detection">${icons.ai}</button>
+                <button type="button" class="tile__quick-btn" data-quick="stream" title="Transport & jitter buffer" aria-label="Stream settings">${icons.sliders}</button>
+                <button type="button" class="tile__quick-btn" data-quick="ir" title="IR night vision" aria-label="IR night vision">${icons.moon}</button>
+                <button type="button" class="tile__quick-btn" data-quick="snap" title="PNG snapshot" aria-label="Snapshot">${icons.download}</button>
+                <button type="button" class="tile__quick-btn" data-quick="details" title="Camera inspector" aria-label="Camera inspector">${icons.info}</button>
+            </div>
+            <div class="tile__pop" data-stream-popover hidden>
+                <header class="tile__pop-head">
+                    <strong>Stream &amp; latency</strong>
+                    <button type="button" class="tile__pop-close" data-pop-close aria-label="Close">${icons.close}</button>
+                </header>
+                <div class="tile__pop-field">
+                    <span>Transport</span>
+                    <div class="segmented segmented--xs">
+                        <button type="button" class="segmented__btn ${transport === 'udp' ? 'is-active' : ''}" data-transport="udp">UDP</button>
+                        <button type="button" class="segmented__btn ${transport === 'tcp' ? 'is-active' : ''}" data-transport="tcp">TCP</button>
+                    </div>
+                </div>
+                <label class="tile__pop-field">
+                    <span>Jitter buffer <b data-jitter-value>${latency} ms</b></span>
+                    <input class="tile__pop-range" type="range" min="50" max="2000" step="10" value="${latency}" data-jitter>
+                </label>
+                <label class="tile__pop-check">
+                    <input type="checkbox" data-framedrop ${camera.frame_drop ? 'checked' : ''}>
+                    <span>Drop late frames</span>
+                </label>
+                <button type="button" class="btn btn--primary btn--sm btn--block" data-stream-save>Apply</button>
+                <p class="tile__pop-hint">Applies the next time this stream starts.</p>
             </div>
             <div class="tile__offline" hidden>no signal</div>`;
 
@@ -180,39 +214,150 @@
             attachTileDetector(camera, tile, viewport);
         }
 
+        bindTileControls(tile, camera, viewport, index);
+        bindDropTarget(tile, index);
+        return tile;
+    }
+
+    /* ------------------------------------------------------- quick actions */
+    function bindTileControls(tile, camera, viewport, index) {
+        const pop = tile.querySelector('[data-stream-popover]');
+        if (pop) {
+            let transport = String(camera.transport || 'tcp').toLowerCase();
+            const markTransport = (value) => {
+                transport = value;
+                pop.querySelectorAll('[data-transport]').forEach((button) => {
+                    button.classList.toggle('is-active', button.dataset.transport === value);
+                });
+            };
+            markTransport(transport);
+
+            if (!state.canManage) {
+                pop.querySelectorAll('input, button').forEach((control) => {
+                    control.disabled = true;
+                });
+            }
+
+            const range = pop.querySelector('[data-jitter]');
+            const rangeLabel = pop.querySelector('[data-jitter-value]');
+            range?.addEventListener('input', () => {
+                if (rangeLabel) rangeLabel.textContent = `${range.value} ms`;
+            });
+
+            pop.querySelectorAll('[data-transport]').forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    if (state.canManage) markTransport(button.dataset.transport);
+                });
+            });
+
+            pop.querySelector('[data-pop-close]')?.addEventListener('click', (event) => {
+                event.stopPropagation();
+                pop.hidden = true;
+            });
+
+            pop.querySelector('[data-stream-save]')?.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                if (!state.canManage) return;
+
+                const button = event.currentTarget;
+                button.disabled = true;
+                try {
+                    const result = await window.Argus.postJson(`${baseUrl}api/cameras/${camera.id}/stream`, {
+                        transport,
+                        latency_ms: Number(range?.value) || 300,
+                        frame_drop: Boolean(pop.querySelector('[data-framedrop]')?.checked),
+                    });
+                    camera.transport = result.transport;
+                    camera.latency_ms = result.latency_ms;
+                    camera.frame_drop = result.frame_drop;
+                    viewport?.setLatencyTarget(result.latency_ms);
+                    window.Argus?.toast?.('Stream settings saved — applied on the next start.', 'success');
+                    pop.hidden = true;
+                } catch (error) {
+                    window.Argus?.toast?.(error.message || 'Could not save the stream settings.', 'error');
+                } finally {
+                    button.disabled = false;
+                }
+            });
+
+            pop.addEventListener('click', (event) => event.stopPropagation());
+            pop.addEventListener('pointerdown', (event) => event.stopPropagation());
+        }
+
         tile.addEventListener('click', (event) => {
-            if (event.target.closest('[data-action]') || event.target.closest('.vp__bar')) return;
+            const action = event.target.closest('[data-quick]')?.dataset.quick;
+            if (action) {
+                event.stopPropagation();
+                state.selected = index;
+                syncSelection();
+                handleQuickAction(action, camera, tile, viewport);
+                return;
+            }
+
+            if (event.target.closest('.vp__bar') || event.target.closest('.tile__pop') || event.target.closest('.dt-panel')) return;
             state.selected = index;
             syncSelection();
         });
 
         tile.addEventListener('dblclick', (event) => {
-            if (event.target.closest('.vp__bar')) return;
+            if (event.target.closest('.vp__bar') || event.target.closest('.tile__pop') || event.target.closest('.dt-panel')) return;
             openCameraModal(camera.id);
         });
+    }
 
-        tile.addEventListener('click', (event) => {
-            const action = event.target.closest('[data-action]')?.dataset.action;
-            if (!action) return;
-            event.stopPropagation();
-            state.selected = index;
-            syncSelection();
+    // Clicking anywhere else dismisses the floating controls.
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('.tile__pop') || event.target.closest('.dt-panel')) return;
+        if (event.target.closest('[data-quick]')) return;
+        closeStreamPopovers();
+        window.Argus.detector?.closePanels();
+    });
 
-            if (action === 'fullscreen') {
-                tile.requestFullscreen?.().catch(() => {});
-            } else if (action === 'snapshot') {
-                saveSnapshot(camera);
-            } else if (action === 'night') {
-                toggleNightVision(camera, viewport);
-            } else if (action === 'open') {
-                openCameraModal(camera.id);
-            } else if (action === 'clear') {
-                clearSlot(index);
-            }
+    function closeStreamPopovers(except = null) {
+        grid.querySelectorAll('[data-stream-popover]').forEach((pop) => {
+            if (pop !== except) pop.hidden = true;
         });
+    }
 
-        bindDropTarget(tile, index);
-        return tile;
+    function handleQuickAction(action, camera, tile, viewport) {
+        if (action === 'zoom') {
+            closeStreamPopovers();
+            window.Argus.detector?.closePanels();
+            tile.classList.toggle('is-zoom');
+            return;
+        }
+
+        if (action === 'ai') {
+            closeStreamPopovers();
+            tile.classList.remove('is-zoom');
+            window.Argus.detector?.togglePanel(camera.id);
+            return;
+        }
+
+        if (action === 'stream') {
+            const pop = tile.querySelector('[data-stream-popover]');
+            const willOpen = Boolean(pop?.hidden);
+            closeStreamPopovers();
+            window.Argus.detector?.closePanels();
+            tile.classList.remove('is-zoom');
+            if (pop && willOpen) pop.hidden = false;
+            return;
+        }
+
+        if (action === 'ir') {
+            toggleNightVision(camera, viewport);
+            return;
+        }
+
+        if (action === 'snap') {
+            saveSnapshot(camera);
+            return;
+        }
+
+        if (action === 'details') {
+            openInspector(camera, viewport);
+        }
     }
 
     function bindDropTarget(tile, index) {
@@ -372,6 +517,50 @@
         viewports.forEach((viewport) => viewport.setNightVision(state.nightVision));
     });
 
+    /* ------------------------------------------------ telemetry & theatre */
+    const pref = {
+        get(key) {
+            try {
+                return window.localStorage.getItem(`argus.${key}`);
+            } catch (error) {
+                return null;
+            }
+        },
+        set(key, value) {
+            try {
+                window.localStorage.setItem(`argus.${key}`, value);
+            } catch (error) {
+                /* private mode */
+            }
+        },
+    };
+
+    function applyTelemetry(on) {
+        grid.classList.toggle('is-telemetry', on);
+        telemetryButton?.setAttribute('aria-pressed', on ? 'true' : 'false');
+        telemetryButton?.classList.toggle('is-active', on);
+    }
+
+    applyTelemetry(pref.get('telemetry') === '1');
+    telemetryButton?.addEventListener('click', () => {
+        const next = !grid.classList.contains('is-telemetry');
+        applyTelemetry(next);
+        pref.set('telemetry', next ? '1' : '0');
+    });
+
+    function applyZen(on) {
+        const html = document.documentElement;
+        if (on) {
+            html.dataset.zen = '1';
+        } else {
+            delete html.dataset.zen;
+        }
+        zenButton?.setAttribute('aria-pressed', on ? 'true' : 'false');
+        zenButton?.classList.toggle('is-active', on);
+    }
+
+    zenButton?.addEventListener('click', () => applyZen(document.documentElement.dataset.zen !== '1'));
+
     /* ------------------------------------------------------------ drawer */
     function openDrawer() {
         drawer.classList.add('is-open');
@@ -469,13 +658,11 @@
                     dot.classList.add(`dot--${entry.status}`);
                 });
 
+                if (entry.latency_ms) camera.last_latency_ms = entry.latency_ms;
+
                 const tile = grid.querySelector(`[data-camera-id="${entry.id}"]`);
                 const statusText = tile?.querySelector('[data-wall-status]');
-                if (statusText) {
-                    statusText.textContent = entry.status === 'online' && entry.latency_ms
-                        ? `online ${entry.latency_ms}ms`
-                        : entry.status;
-                }
+                if (statusText) statusText.textContent = entry.status === 'online' ? 'LIVE' : entry.status;
             });
 
             updateOnlineCount();
@@ -899,6 +1086,137 @@
         window.Argus?.toast?.('Snapshot saved from the live canvas.', 'success');
     }
 
+    /* --------------------------------------------------- camera inspector */
+    let inspectorTimer = null;
+    let inspectorTarget = null;
+
+    function openInspector(camera, viewport) {
+        if (!inspector) return;
+
+        inspectorTarget = { camera, viewport };
+        closeStreamPopovers();
+        window.Argus.detector?.closePanels();
+
+        const set = (selector, value) => {
+            const node = inspector.querySelector(selector);
+            if (node) node.textContent = value;
+        };
+
+        const host = String(camera.endpoint || '').split(':')[0];
+        const hasHost = host !== '';
+        const rtsp = hasHost && camera.rtsp_path
+            ? `rtsp://${host}:${Number(camera.rtsp_port) || 554}${camera.rtsp_path}`
+            : '—';
+
+        set('[data-inspector-title]', camera.name);
+        set('[data-inspector-sub]', [camera.location, camera.group, camera.driver_label].filter(Boolean).join(' · '));
+        set('[data-inspector-endpoint]', hasHost ? camera.endpoint : '—');
+        set('[data-inspector-rtsp]', rtsp);
+        set('[data-inspector-driver]', camera.driver_label || camera.driver || '—');
+        set('[data-inspector-mode]', modeLabel(camera.mode));
+        set('[data-inspector-transport]', String(camera.transport || 'tcp').toUpperCase());
+        set('[data-inspector-probe]', camera.last_latency_ms ? `${camera.last_latency_ms} ms` : (camera.status || 'unknown'));
+
+        const result = inspector.querySelector('[data-inspector-verify-result]');
+        if (result) {
+            result.hidden = true;
+            result.innerHTML = '';
+        }
+
+        const edit = inspector.querySelector('[data-inspector-edit]');
+        if (edit) {
+            edit.href = `${baseUrl}cameras/${camera.id}/edit`;
+            edit.hidden = !state.canManage;
+        }
+
+        const remove = inspector.querySelector('[data-inspector-remove]');
+        if (remove) remove.hidden = !(state.canManage && state.mode === 'custom');
+
+        const verify = inspector.querySelector('[data-inspector-verify]');
+        if (verify) verify.disabled = !state.canManage;
+
+        updateInspectorTelemetry();
+        window.clearInterval(inspectorTimer);
+        inspectorTimer = window.setInterval(updateInspectorTelemetry, 1000);
+
+        inspector.classList.add('is-open');
+        inspector.setAttribute('aria-hidden', 'false');
+        if (inspectorScrim) inspectorScrim.hidden = false;
+    }
+
+    function updateInspectorTelemetry() {
+        if (!inspectorTarget || !inspector) return;
+        const { camera, viewport } = inspectorTarget;
+        const telemetry = viewport?.telemetry || {};
+        const source = viewport?.getSourceElement?.();
+        const width = source?.videoWidth || source?.naturalWidth || 0;
+        const height = source?.videoHeight || source?.naturalHeight || 0;
+
+        const set = (selector, value) => {
+            const node = inspector.querySelector(selector);
+            if (node) node.textContent = value;
+        };
+
+        set('[data-inspector-fps]', Number(telemetry.fps || 0).toFixed(1));
+        set('[data-inspector-frame]', `${Number(telemetry.frameTime || 0).toFixed(1)} ms`);
+        set('[data-inspector-jitter]', `${Number(telemetry.jitter || 0).toFixed(1)} ms`);
+        set('[data-inspector-buffer]', `${Math.round(Number(telemetry.buffer || 0))}%`);
+        set('[data-inspector-latency]', `${Math.round(Number(telemetry.latency || camera.latency_ms || 0))} ms`);
+        set('[data-inspector-resolution]', width && height ? `${width} × ${height}` : '—');
+    }
+
+    function closeInspector() {
+        window.clearInterval(inspectorTimer);
+        inspectorTimer = null;
+        inspectorTarget = null;
+        inspector?.classList.remove('is-open');
+        inspector?.setAttribute('aria-hidden', 'true');
+        if (inspectorScrim) inspectorScrim.hidden = true;
+    }
+
+    inspector?.querySelector('[data-inspector-close]')?.addEventListener('click', closeInspector);
+    inspectorScrim?.addEventListener('click', closeInspector);
+
+    inspector?.querySelector('[data-inspector-verify]')?.addEventListener('click', async (event) => {
+        if (!inspectorTarget) return;
+
+        const button = event.currentTarget;
+        const box = inspector.querySelector('[data-inspector-verify-result]');
+        button.disabled = true;
+
+        try {
+            const report = await window.Argus.postJson(`${baseUrl}cameras/${inspectorTarget.camera.id}/credentials`, {});
+            if (!box) return;
+
+            box.hidden = false;
+            box.innerHTML = `
+                <p class="inspector__verdict ${report.ok ? 'is-ok' : 'is-bad'}">${esc(report.status || 'UNKNOWN')}</p>
+                <dl class="inspector__grid inspector__grid--wide">
+                    <div><dt>Decrypted</dt><dd><code>${esc(report.plaintext || '(none)')}</code></dd></div>
+                    <div><dt>Masked</dt><dd>${esc(report.masked || '—')}</dd></div>
+                    <div><dt>Encoded</dt><dd><code>${esc(report.encoded_password || '—')}</code></dd></div>
+                    <div><dt>RTSP URI</dt><dd>${esc(report.uri_masked || report.uri || '—')}</dd></div>
+                </dl>
+                ${(report.issues || []).length ? `<ul class="inspector__issues">${report.issues.map((issue) => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}`;
+        } catch (error) {
+            if (box) {
+                box.hidden = false;
+                box.innerHTML = `<p class="inspector__verdict is-bad">${esc(error.message || 'Verification failed.')}</p>`;
+            }
+        } finally {
+            if (inspectorTarget) button.disabled = false;
+        }
+    });
+
+    inspector?.querySelector('[data-inspector-remove]')?.addEventListener('click', () => {
+        if (!inspectorTarget) return;
+        const cameraId = inspectorTarget.camera.id;
+        const tile = grid.querySelector(`.tile[data-camera-id="${cameraId}"]`);
+        const slot = tile ? Number(tile.dataset.slot) : -1;
+        closeInspector();
+        if (slot >= 0) clearSlot(slot);
+    });
+
     /* -------------------------------------------------------- camera modal */
     function openCameraModal(cameraId) {
         const camera = cameraById.get(Number(cameraId));
@@ -1049,6 +1367,10 @@
             render();
         } else if (event.key === 'Escape') {
             closeDrawer();
+            closeStreamPopovers();
+            window.Argus.detector?.closePanels();
+            closeInspector();
+            applyZen(false);
         }
     });
 

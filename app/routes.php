@@ -79,4 +79,5 @@ return static function (Router $router): void {
     $router->get('/api/status', [ApiController::class, 'status']);
     $router->post('/api/webrtc/{id}', [ApiController::class, 'webrtc']);
     $router->post('/api/hls/{id}', [ApiController::class, 'hls']);
+    $router->post('/api/cameras/{id}/stream', [ApiController::class, 'stream']);
 };

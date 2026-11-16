@@ -51,7 +51,147 @@ final class Hls
             return @posix_kill($pid, 0);
         }
 
-        return is_dir('/proc/' . $pid);
+        if (is_dir('/proc/' . $pid)) {
+            return true;
+        }
+
+        // Windows has no /proc and PHP usually ships without the posix
+        // extension, so ask the task list instead.
+        if (PHP_OS_FAMILY === 'Windows') {
+            $output = [];
+            $code = 1;
+            @exec('tasklist /FI ' . escapeshellarg('PID eq ' . $pid) . ' /NH 2>NUL', $output, $code);
+
+            return $code === 0 && preg_match('/\b' . $pid . '\b/', implode("\n", $output)) === 1;
+        }
+
+        return false;
+    }
+
+    /** Stop a running converter process. */
+    private static function terminate(int $pid, bool $force = false): void
+    {
+        if ($pid <= 0) {
+            return;
+        }
+
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, $force ? 9 : 15);
+
+            return;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            // /T reaches ffmpeg through the cmd.exe wrapper that owns it.
+            @exec('taskkill /PID ' . $pid . ' /T' . ($force ? ' /F' : '') . ' 2>NUL');
+
+            return;
+        }
+
+        @exec('kill ' . ($force ? '-9 ' : '') . $pid . ' 2>/dev/null');
+    }
+
+    /**
+     * Start the converter detached from the request and return its PID.
+     *
+     * POSIX shells expand `$!`, so `&` plus `echo $!` is enough. cmd.exe does
+     * not, hence the PowerShell path on Windows: it starts ffmpeg inside a
+     * cmd.exe that owns the console and writes that PID to the pid file.
+     */
+    private static function spawn(array $arguments, string $log, string $pidFile): int
+    {
+        @unlink($pidFile);
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $script = self::windowsLaunchScript($arguments, $log, $pidFile);
+            $encoded = base64_encode((string) mb_convert_encoding($script, 'UTF-16LE', 'UTF-8'));
+
+            $output = [];
+            $code = 1;
+            @exec('powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' . $encoded . ' 2>&1', $output, $code);
+
+            // Start-Process is fast, but read the file rather than trusting
+            // timing: the script may still be starting up.
+            $deadline = microtime(true) + 3.0;
+            while (microtime(true) < $deadline) {
+                $pid = (int) trim((string) @file_get_contents($pidFile));
+                if ($pid > 0) {
+                    return $pid;
+                }
+
+                usleep(100000);
+            }
+
+            return 0;
+        }
+
+        $command = implode(' ', array_map('escapeshellarg', $arguments))
+            . ' >> ' . escapeshellarg($log) . ' 2>&1 & echo $!';
+
+        $output = [];
+        $code = 1;
+        @exec($command, $output, $code);
+
+        return (int) ($output[0] ?? 0);
+    }
+
+    /** The PowerShell program that starts ffmpeg detached and records its PID. */
+    private static function windowsLaunchScript(array $arguments, string $log, string $pidFile): string
+    {
+        $commandLine = self::windowsQuote((string) array_shift($arguments));
+
+        foreach ($arguments as $argument) {
+            $commandLine .= ' ' . self::windowsQuote((string) $argument);
+        }
+
+        // cmd /s strips only the outer quotes and keeps the rest verbatim,
+        // which is what lets paths containing spaces survive intact.
+        $inner = $commandLine . ' >> "' . str_replace('"', '""', $log) . '" 2>&1';
+
+        return implode("\r\n", [
+            '$psi = New-Object System.Diagnostics.ProcessStartInfo',
+            '$psi.FileName = ' . self::powershellLiteral('cmd.exe'),
+            '$psi.Arguments = ' . self::powershellLiteral('/s /c "' . $inner . '"'),
+            '$psi.UseShellExecute = $false',
+            '$psi.CreateNoWindow = $true',
+            '$process = [System.Diagnostics.Process]::Start($psi)',
+            '$process.Id | Out-File -Encoding ascii -LiteralPath ' . self::powershellLiteral($pidFile),
+        ]);
+    }
+
+    /** Quote one argument the way the MSVC runtime expects. */
+    private static function windowsQuote(string $value): string
+    {
+        if ($value !== '' && !preg_match('/[\s"]/', $value)) {
+            return $value;
+        }
+
+        $quoted = '"';
+        $slashes = 0;
+
+        foreach (str_split($value) as $char) {
+            if ($char === '\\') {
+                $slashes++;
+                continue;
+            }
+
+            if ($char === '"') {
+                $quoted .= str_repeat('\\', $slashes * 2 + 1) . '"';
+                $slashes = 0;
+                continue;
+            }
+
+            $quoted .= str_repeat('\\', $slashes) . $char;
+            $slashes = 0;
+        }
+
+        return $quoted . str_repeat('\\', $slashes * 2) . '"';
+    }
+
+    /** A single-quoted PowerShell string literal. */
+    private static function powershellLiteral(string $value): string
+    {
+        return "'" . str_replace("'", "''", $value) . "'";
     }
 
     /** Wait for a process to disappear, so its camera session is released. */
@@ -304,16 +444,15 @@ final class Hls
             $playlist,
         ]);
 
-        $command = implode(' ', array_map('escapeshellarg', $args))
-            . ' >> ' . escapeshellarg($dir . '/ffmpeg.log') . ' 2>&1 & echo $!';
-
-        $output = [];
-        $code = 1;
-        @exec($command, $output, $code);
-        $pid = (int) ($output[0] ?? 0);
+        $pid = self::spawn($args, $dir . '/ffmpeg.log', $dir . '/ffmpeg.pid');
 
         if ($pid <= 0) {
-            return ['ok' => false, 'error' => 'Unable to start the stream converter.'];
+            return [
+                'ok'    => false,
+                'error' => 'ffmpeg could not be started as a background process. ' . (PHP_OS_FAMILY === 'Windows'
+                    ? 'Check that PowerShell is available and that PHP is not blocked from running programs by open_basedir or disable_functions.'
+                    : 'Check that PHP is allowed to call exec() and that bin/ffmpeg is executable.'),
+            ];
         }
 
         file_put_contents($dir . '/ffmpeg.pid', (string) $pid);
@@ -403,12 +542,12 @@ final class Hls
         $pid = is_file($pidFile) ? (int) trim((string) file_get_contents($pidFile)) : 0;
 
         if (self::alive($pid)) {
-            @exec('kill ' . escapeshellarg((string) $pid) . ' 2>/dev/null');
+            self::terminate($pid);
 
             // Cameras often accept a single RTSP client, so the next converter
             // must not start while this one still holds the session.
             if (!self::waitForExit($pid, 2.0)) {
-                @exec('kill -9 ' . escapeshellarg((string) $pid) . ' 2>/dev/null');
+                self::terminate($pid, true);
                 self::waitForExit($pid, 1.0);
             }
         }

@@ -94,104 +94,38 @@ final class Hls
     /**
      * Start the converter detached from the request and return its PID.
      *
-     * POSIX shells expand `$!`, so `&` plus `echo $!` is enough. cmd.exe does
-     * not, hence the PowerShell path on Windows: it starts ffmpeg inside a
-     * cmd.exe that owns the console and writes that PID to the pid file.
+     * proc_open is used instead of a shell (`... & echo $!`) because that only
+     * works in a POSIX shell: cmd.exe prints `$!` literally, so every HLS
+     * camera failed on Windows. An argument array needs no shell quoting on
+     * either platform, and the child outlives the request because it writes to
+     * a log file rather than to pipes PHP has to drain.
      */
     private static function spawn(array $arguments, string $log, string $pidFile): int
     {
         @unlink($pidFile);
 
-        if (PHP_OS_FAMILY === 'Windows') {
-            $script = self::windowsLaunchScript($arguments, $log, $pidFile);
-            $encoded = base64_encode((string) mb_convert_encoding($script, 'UTF-16LE', 'UTF-8'));
+        $descriptors = [
+            0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'],
+            1 => ['file', $log, 'a'],
+            2 => ['file', $log, 'a'],
+        ];
 
-            $output = [];
-            $code = 1;
-            @exec('powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' . $encoded . ' 2>&1', $output, $code);
+        $process = @proc_open($arguments, $descriptors, $pipes, null, null, ['bypass_shell' => true]);
 
-            // Start-Process is fast, but read the file rather than trusting
-            // timing: the script may still be starting up.
-            $deadline = microtime(true) + 3.0;
-            while (microtime(true) < $deadline) {
-                $pid = (int) trim((string) @file_get_contents($pidFile));
-                if ($pid > 0) {
-                    return $pid;
-                }
-
-                usleep(100000);
-            }
-
+        if (!is_resource($process)) {
             return 0;
         }
 
-        $command = implode(' ', array_map('escapeshellarg', $arguments))
-            . ' >> ' . escapeshellarg($log) . ' 2>&1 & echo $!';
+        $status = proc_get_status($process);
+        $pid = (int) ($status['pid'] ?? 0);
 
-        $output = [];
-        $code = 1;
-        @exec($command, $output, $code);
-
-        return (int) ($output[0] ?? 0);
-    }
-
-    /** The PowerShell program that starts ffmpeg detached and records its PID. */
-    private static function windowsLaunchScript(array $arguments, string $log, string $pidFile): string
-    {
-        $commandLine = self::windowsQuote((string) array_shift($arguments));
-
-        foreach ($arguments as $argument) {
-            $commandLine .= ' ' . self::windowsQuote((string) $argument);
+        if ($pid <= 0) {
+            return 0;
         }
 
-        // cmd /s strips only the outer quotes and keeps the rest verbatim,
-        // which is what lets paths containing spaces survive intact.
-        $inner = $commandLine . ' >> "' . str_replace('"', '""', $log) . '" 2>&1';
+        file_put_contents($pidFile, (string) $pid);
 
-        return implode("\r\n", [
-            '$psi = New-Object System.Diagnostics.ProcessStartInfo',
-            '$psi.FileName = ' . self::powershellLiteral('cmd.exe'),
-            '$psi.Arguments = ' . self::powershellLiteral('/s /c "' . $inner . '"'),
-            '$psi.UseShellExecute = $false',
-            '$psi.CreateNoWindow = $true',
-            '$process = [System.Diagnostics.Process]::Start($psi)',
-            '$process.Id | Out-File -Encoding ascii -LiteralPath ' . self::powershellLiteral($pidFile),
-        ]);
-    }
-
-    /** Quote one argument the way the MSVC runtime expects. */
-    private static function windowsQuote(string $value): string
-    {
-        if ($value !== '' && !preg_match('/[\s"]/', $value)) {
-            return $value;
-        }
-
-        $quoted = '"';
-        $slashes = 0;
-
-        foreach (str_split($value) as $char) {
-            if ($char === '\\') {
-                $slashes++;
-                continue;
-            }
-
-            if ($char === '"') {
-                $quoted .= str_repeat('\\', $slashes * 2 + 1) . '"';
-                $slashes = 0;
-                continue;
-            }
-
-            $quoted .= str_repeat('\\', $slashes) . $char;
-            $slashes = 0;
-        }
-
-        return $quoted . str_repeat('\\', $slashes * 2) . '"';
-    }
-
-    /** A single-quoted PowerShell string literal. */
-    private static function powershellLiteral(string $value): string
-    {
-        return "'" . str_replace("'", "''", $value) . "'";
+        return $pid;
     }
 
     /** Wait for a process to disappear, so its camera session is released. */
@@ -450,8 +384,8 @@ final class Hls
             return [
                 'ok'    => false,
                 'error' => 'ffmpeg could not be started as a background process. ' . (PHP_OS_FAMILY === 'Windows'
-                    ? 'Check that PowerShell is available and that PHP is not blocked from running programs by open_basedir or disable_functions.'
-                    : 'Check that PHP is allowed to call exec() and that bin/ffmpeg is executable.'),
+                    ? 'Check that PHP may start programs (proc_open is not disabled) and that bin/ffmpeg.exe runs from a command prompt.'
+                    : 'Check that PHP may start programs (proc_open is not disabled) and that bin/ffmpeg is executable.'),
             ];
         }
 
